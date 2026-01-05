@@ -1,117 +1,100 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WebAR Demo</title>
+
   <style>
-    html, body { height: 100%; margin: 0; background: #000; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-    #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .hud {
-      position: fixed; inset: 0; pointer-events: none;
-      display: grid; place-items: center;
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
     }
-    .card {
-      pointer-events: auto;
-      width: min(92vw, 520px);
-      border-radius: 20px;
-      padding: 16px 16px 14px;
-      backdrop-filter: blur(10px);
-      background: rgba(0,0,0,.35);
-      border: 1px solid rgba(255,255,255,.18);
-      color: #fff;
-      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+
+    /* camera */
+    video {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
     }
-    .title { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
-    .sub { font-size: 13px; opacity: .85; margin: 0 0 12px; line-height: 1.35; }
-    .row { display: flex; gap: 10px; }
-    button {
-      flex: 1;
-      border: 0;
-      border-radius: 14px;
-      padding: 12px 12px;
-      font-weight: 650;
+
+    /* UI overlay */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      margin: auto;
+      width: min(92vw, 420px);
+      height: auto;
+      z-index: 10;
       cursor: pointer;
     }
-    .primary { background: #ffffff; color: #111; }
-    .ghost { background: rgba(255,255,255,.16); color: #fff; }
-    .badge {
-      display: inline-block;
-      margin-top: 10px;
-      font-size: 12px;
-      opacity: .9;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.14);
-      border: 1px solid rgba(255,255,255,.18);
-    }
-    /* 一个“虚拟 AR 目标框” */
-    .reticle {
+
+    /* small hint text */
+    .hint {
       position: fixed;
-      left: 50%; top: 50%;
-      width: 190px; height: 190px;
-      transform: translate(-50%, -55%);
-      border-radius: 28px;
-      border: 2px dashed rgba(255,255,255,.65);
-      box-shadow: 0 0 0 8px rgba(255,255,255,.08);
-      pointer-events: none;
+      bottom: 14px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 12px;
+      opacity: 0.75;
+      z-index: 20;
     }
   </style>
 </head>
-<body>
-  <video id="cam" autoplay playsinline muted></video>
-  <div class="reticle"></div>
 
-  <div class="hud">
-    <div class="card">
-      <p class="title">OpenWay • WebAR Prototype</p>
-      <p class="sub">
-        这是一个最小可运行的 WebAR demo：在浏览器中调用相机，并叠加 UI / 指示框作为 AR 交互的 proof-of-concept。
-      </p>
-      <div class="row">
-        <button class="primary" id="startBtn">开启相机</button>
-        <button class="ghost" id="switchBtn">切换镜头</button>
-      </div>
-      <div class="badge" id="status">状态：未启动</div>
-    </div>
-  </div>
+<body>
+
+  <!-- Camera -->
+  <video id="cam" autoplay playsinline muted></video>
+
+  <!-- Overlay UI -->
+  <img id="overlay" src="scan1.png" alt="AR UI">
+
+  <div class="hint">Tap screen to continue</div>
 
   <script>
-    const video = document.getElementById('cam');
-    const statusEl = document.getElementById('status');
-    const startBtn = document.getElementById('startBtn');
-    const switchBtn = document.getElementById('switchBtn');
+    const overlays = [
+      "scan1.png",
+      "scan2.png",
+      "scan3.png",
+      "scan4.png"
+    ];
 
-    let currentFacing = 'environment'; // environment = 后镜头, user = 前镜头
-    let stream = null;
+    let step = 0;
+    const overlayImg = document.getElementById("overlay");
 
     async function startCamera() {
       try {
-        statusEl.textContent = '状态：请求相机权限中...';
-        if (stream) stream.getTracks().forEach(t => t.stop());
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: currentFacing } },
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
           audio: false
         });
-
-        video.srcObject = stream;
-        statusEl.textContent = `状态：运行中（${currentFacing === 'environment' ? '后镜头' : '前镜头'}）`;
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = '状态：无法开启相机（请用手机浏览器，并允许权限）';
-        alert('无法开启相机：请在手机浏览器打开，并允许相机权限。');
+        document.getElementById("cam").srcObject = stream;
+      } catch (e) {
+        alert("Please allow camera access and open on mobile.");
       }
     }
 
-    startBtn.addEventListener('click', startCamera);
-    switchBtn.addEventListener('click', async () => {
-      currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
-      await startCamera();
-    });
+    function nextStep() {
+      if (step < overlays.length - 1) {
+        step++;
+        overlayImg.src = overlays[step];
+      }
+    }
 
-    // 手机上有些浏览器需要用户点击后才能启动，所以不自动启动
+    overlayImg.addEventListener("click", nextStep);
+
+    startCamera();
   </script>
+
 </body>
 </html>
 
