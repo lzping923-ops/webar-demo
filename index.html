@@ -1,188 +1,117 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hans">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>WebAR Guide</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>WebAR Demo</title>
   <style>
-    :root { --pad: 14px; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#000; }
-    #wrap { position: fixed; inset:0; overflow:hidden; }
-    video { position:absolute; inset:0; width:100%; height:100%; object-fit: cover; background:#000; }
-    .top {
-      position: absolute; left: var(--pad); right: var(--pad); top: var(--pad);
-      color:#fff; background: rgba(0,0,0,.45); border-radius: 14px; padding: 10px 12px;
-      display:flex; gap:10px; align-items:center; backdrop-filter: blur(8px);
+    html, body { height: 100%; margin: 0; background: #000; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .hud {
+      position: fixed; inset: 0; pointer-events: none;
+      display: grid; place-items: center;
     }
-    .badge { font-weight:700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.18); }
-    .msg { font-size: 13px; line-height: 1.2; opacity:.95; }
-    .center {
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      color:#fff; text-align:center;
-    }
-    .spinner {
-      width:56px; height:56px; border-radius: 50%;
-      border: 4px solid rgba(255,255,255,.25);
-      border-top-color: rgba(255,255,255,.95);
-      margin: 0 auto 10px;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
     .card {
-      position:absolute; left: var(--pad); right: var(--pad); bottom: var(--pad);
-      background: rgba(255,255,255,.92); border-radius: 18px; padding: 14px;
-      display:none; box-shadow: 0 8px 30px rgba(0,0,0,.25);
+      pointer-events: auto;
+      width: min(92vw, 520px);
+      border-radius: 20px;
+      padding: 16px 16px 14px;
+      backdrop-filter: blur(10px);
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.18);
+      color: #fff;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
     }
-    .title { font-weight: 800; font-size: 16px; margin:0 0 6px; }
-    .desc { font-size: 13px; margin:0 0 10px; line-height: 1.3; opacity:.9; }
-    .steps { font-size: 13px; margin:0 0 12px; }
-    .steps div { margin: 6px 0; }
-    .row { display:flex; gap:10px; }
+    .title { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
+    .sub { font-size: 13px; opacity: .85; margin: 0 0 12px; line-height: 1.35; }
+    .row { display: flex; gap: 10px; }
     button {
-      flex:1; border:0; border-radius: 14px; padding: 12px 12px;
-      font-weight:700; cursor:pointer;
+      flex: 1;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 12px;
+      font-weight: 650;
+      cursor: pointer;
     }
-    .primary { background:#111; color:#fff; }
-    .ghost { background:#e9e9e9; color:#111; }
-    #startGate {
-      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      background: radial-gradient(ellipse at center, rgba(0,0,0,.55), rgba(0,0,0,.85));
+    .primary { background: #ffffff; color: #111; }
+    .ghost { background: rgba(255,255,255,.16); color: #fff; }
+    .badge {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 12px;
+      opacity: .9;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.18);
     }
-    #startBtn {
-      border:0; border-radius: 18px; padding: 14px 16px; font-weight: 800;
-      background: #fff; color:#111; width:min(320px, 86vw);
-    }
-    #error {
-      position:absolute; left: var(--pad); right: var(--pad); bottom: calc(var(--pad) + 90px);
-      color:#fff; background: rgba(220,0,0,.55); border-radius: 14px; padding: 10px 12px;
-      display:none;
+    /* 一个“虚拟 AR 目标框” */
+    .reticle {
+      position: fixed;
+      left: 50%; top: 50%;
+      width: 190px; height: 190px;
+      transform: translate(-50%, -55%);
+      border-radius: 28px;
+      border: 2px dashed rgba(255,255,255,.65);
+      box-shadow: 0 0 0 8px rgba(255,255,255,.08);
+      pointer-events: none;
     }
   </style>
 </head>
-
 <body>
-<div id="wrap">
-  <video id="cam" playsinline autoplay muted></video>
+  <video id="cam" autoplay playsinline muted></video>
+  <div class="reticle"></div>
 
-  <div id="startGate">
-    <button id="startBtn">Start AR Mode (Allow Camera)</button>
-  </div>
-
-  <div class="top">
-    <span class="badge" id="statusBadge">IDLE</span>
-    <div class="msg" id="statusText">Tap Start → Allow camera</div>
-  </div>
-
-  <div class="center" id="scanUI" style="display:none;">
-    <div class="spinner"></div>
-    <div style="font-weight:800; font-size:18px;">Scanning…</div>
-    <div style="opacity:.85; margin-top:6px; font-size:13px;">Hold steady</div>
-  </div>
-
-  <div id="error"></div>
-
-  <div class="card" id="guideCard">
-    <p class="title" id="locTitle">Cafeteria</p>
-    <p class="desc" id="locDesc">Accessibility entrance guide (prototype).</p>
-    <div class="steps" id="locSteps"></div>
-
-    <div class="row">
-      <button class="primary" id="openMapBtn">Open in Google Maps</button>
-      <button class="ghost" id="resetBtn">Rescan</button>
+  <div class="hud">
+    <div class="card">
+      <p class="title">OpenWay • WebAR Prototype</p>
+      <p class="sub">
+        这是一个最小可运行的 WebAR demo：在浏览器中调用相机，并叠加 UI / 指示框作为 AR 交互的 proof-of-concept。
+      </p>
+      <div class="row">
+        <button class="primary" id="startBtn">开启相机</button>
+        <button class="ghost" id="switchBtn">切换镜头</button>
+      </div>
+      <div class="badge" id="status">状态：未启动</div>
     </div>
   </div>
-</div>
 
-<script>
-  const LOC = {
-    cafetaria: {
-      title: "Cafeteria",
-      desc: "Accessibility entrance guide (prototype).",
-      steps: [
-        "Step 1: Walk forward ~20m",
-        "Step 2: Keep right along the corridor",
-        "Step 3: Look for the accessibility sign"
-      ],
-      mapUrl: "https://www.google.com/maps/search/?api=1&query=USM%20Cafeteria"
-    },
-    redhouse: {
-      title: "Red House",
-      desc: "Quick navigation guide (prototype).",
-      steps: [
-        "Step 1: Turn left at the junction",
-        "Step 2: Walk straight to the red building",
-        "Step 3: Tap Open Map for navigation"
-      ],
-      mapUrl: "https://www.google.com/maps/search/?api=1&query=USM%20Red%20House"
+  <script>
+    const video = document.getElementById('cam');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const switchBtn = document.getElementById('switchBtn');
+
+    let currentFacing = 'environment'; // environment = 后镜头, user = 前镜头
+    let stream = null;
+
+    async function startCamera() {
+      try {
+        statusEl.textContent = '状态：请求相机权限中...';
+        if (stream) stream.getTracks().forEach(t => t.stop());
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: currentFacing } },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        statusEl.textContent = `状态：运行中（${currentFacing === 'environment' ? '后镜头' : '前镜头'}）`;
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = '状态：无法开启相机（请用手机浏览器，并允许权限）';
+        alert('无法开启相机：请在手机浏览器打开，并允许相机权限。');
+      }
     }
-  };
 
-  const p = new URLSearchParams(location.search);
-  const key = (p.get("loc") || "cafetaria").toLowerCase();
-  const data = LOC[key] || LOC.cafetaria;
+    startBtn.addEventListener('click', startCamera);
+    switchBtn.addEventListener('click', async () => {
+      currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
+      await startCamera();
+    });
 
-  const cam = document.getElementById("cam");
-  const startGate = document.getElementById("startGate");
-  const startBtn = document.getElementById("startBtn");
-  const badge = document.getElementById("statusBadge");
-  const statusText = document.getElementById("statusText");
-  const scanUI = document.getElementById("scanUI");
-  const guideCard = document.getElementById("guideCard");
-  const locTitle = document.getElementById("locTitle");
-  const locDesc  = document.getElementById("locDesc");
-  const locSteps = document.getElementById("locSteps");
-  const openMapBtn = document.getElementById("openMapBtn");
-  const resetBtn = document.getElementById("resetBtn");
-  const errorBox = document.getElementById("error");
-
-  function setStatus(s, t){ badge.textContent=s; statusText.textContent=t; }
-  function showError(m){ errorBox.textContent=m; errorBox.style.display="block"; }
-  function hideError(){ errorBox.style.display="none"; }
-
-  async function startCamera(){
-    hideError();
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video:{ facingMode:{ ideal:"environment" } }, audio:false
-      });
-      cam.srcObject = stream;
-      await cam.play();
-      return true;
-    }catch(e){
-      showError("Camera blocked. Use HTTPS and allow permission.");
-      return false;
-    }
-  }
-
-  let timer=null;
-  function beginScan(){
-    guideCard.style.display="none";
-    scanUI.style.display="block";
-    setStatus("SCANNING","Analyzing environment…");
-    clearTimeout(timer);
-    timer=setTimeout(()=>{
-      scanUI.style.display="none";
-      setStatus("DETECTED ✅","Guide ready");
-      locTitle.textContent=data.title;
-      locDesc.textContent=data.desc;
-      locSteps.innerHTML=data.steps.map(s=>`<div>• ${s}</div>`).join("");
-      openMapBtn.onclick=()=>location.href=data.mapUrl;
-      guideCard.style.display="block";
-    },3000);
-  }
-
-  resetBtn.onclick=()=>beginScan();
-  startBtn.onclick=async()=>{
-    setStatus("STARTING","Requesting camera permission…");
-    const ok=await startCamera();
-    if(!ok) return;
-    startGate.style.display="none";
-    beginScan();
-  };
-
-  if(location.protocol!=="https:" && location.hostname!=="localhost"){
-    showError("Tip: WebAR needs HTTPS to access camera.");
-  }
-</script>
+    // 手机上有些浏览器需要用户点击后才能启动，所以不自动启动
+  </script>
 </body>
 </html>
+
