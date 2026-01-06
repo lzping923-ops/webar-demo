@@ -53,7 +53,7 @@
     }
     .state.active{ display: flex; }
 
-    /* Click layer to advance */
+    /* Click layer to advance + swipe */
     #clickLayer{
       position: absolute;
       inset: 0;
@@ -240,23 +240,26 @@
       100% { filter: brightness(.95); }
     }
 
-    /* Draggable arrow */
+    /* Fixed arrow: position fixed, only rotates */
     #arrow{
-  position: absolute;
-  left: 50%;
-  bottom: 28%;              /* 固定在这里 */
-  transform: translateX(-50%) rotate(0deg);
-  transform-origin: center center;
+      position: absolute;
+      left: 50%;
+      bottom: 30%;
+      transform: translateX(-50%) rotate(0deg); /* 0deg = ↑ */
+      transform-origin: center center;
 
-  width: 72px;
-  z-index: 25;
+      width: 72px;  /* ✅ 改这边调大小 */
+      height: auto;
+      z-index: 25;
 
-  pointer-events: none;     /* 👈 不再被拖 */
-  user-select: none;
+      pointer-events: none;  /* 👈 固定，不允许拖动 */
+      user-select: none;
+      -webkit-user-drag: none;
 
-  filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
-  transition: transform 0.12s ease-out;
-}
+      filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
+      transition: transform 0.12s ease-out;
+      display: none; /* only on guide */
+    }
   </style>
 </head>
 
@@ -302,7 +305,7 @@
         <img class="path-img" src="path_ok.png" alt="Accessible path" />
       </div>
 
-      <!-- 往上移：top:46%（你要再上就调 44/42） -->
+      <!-- 往上移：top:46% -->
       <div style="position:absolute; left:50%; top:46%; transform:translate(-50%,-58%); width:100%;">
         <div class="iconBox okBox">
           <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
@@ -338,6 +341,7 @@
     <div class="state" id="state-guide">
       <div class="stage-chip">Guidance</div>
 
+      <!-- require arrow.png in same folder -->
       <img id="arrow" src="arrow.png" alt="Arrow" />
 
       <div id="route" aria-hidden="true">
@@ -347,7 +351,7 @@
         <div class="dot"></div>
       </div>
 
-      <div class="tap-hint">Drag the arrow • Tap to end</div>
+      <div class="tap-hint">Swipe to rotate arrow • Tap to end</div>
     </div>
   </div>
 
@@ -383,12 +387,14 @@
       await video.play();
     }
 
-    // States
+    // Elements
     const states = ["state-start", "state-scan", "state-ok", "state-no", "state-guide"];
     const backBtn = document.getElementById('backBtn');
     const demoBtns = document.getElementById('demoBtns');
     const arrow = document.getElementById('arrow');
+    const clickLayer = document.getElementById('clickLayer');
 
+    // Helpers
     function show(id){
       for (const s of states) document.getElementById(s).classList.remove('active');
       document.getElementById(id).classList.add('active');
@@ -399,12 +405,8 @@
       // Arrow only on guide
       arrow.style.display = (id === "state-guide") ? "block" : "none";
 
-      // When entering guide, ensure arrow has a default orientation (up)
-      if (id === "state-guide") {
-        // If user previously dragged it, keep its position but reset orientation
-        arrow.dataset.rot = "0";
-        applyArrowRotation(0);
-      }
+      // Reset arrow orientation when entering guide
+      if (id === "state-guide") applyArrowRotation(0);
     }
 
     // Back action: always return to Start Scan
@@ -438,8 +440,7 @@
       }, 1200);
     }
 
-    // Tap to advance
-    const clickLayer = document.getElementById('clickLayer');
+    // Tap to advance (all states)
     clickLayer.addEventListener('click', async () => {
       const active = document.querySelector('.state.active')?.id;
 
@@ -473,120 +474,57 @@
       }
     });
 
-    // ---- Draggable + auto-rotate arrow ----
-   let lastX = null;
-let lastY = null;
-
-clickLayer.addEventListener('touchstart', (e) => {
-  const t = e.touches[0];
-  lastX = t.clientX;
-  lastY = t.clientY;
-}, { passive: true });
-
-clickLayer.addEventListener('touchmove', (e) => {
-  if (lastX === null || lastY === null) return;
-
-  const t = e.touches[0];
-  const dx = t.clientX - lastX;
-  const dy = t.clientY - lastY;
-
-  const dead = 6; // 防抖
-  if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
-    if (Math.abs(dx) > Math.abs(dy)) {
-      applyArrowRotation(dx > 0 ? 90 : 270);   // → / ←
-    } else {
-      applyArrowRotation(dy > 0 ? 180 : 0);    // ↓ / ↑
+    // Arrow rotate helper
+    function applyArrowRotation(deg){
+      arrow.style.transform = `translateX(-50%) rotate(${deg}deg)`;
     }
-  }
 
-  lastX = t.clientX;
-  lastY = t.clientY;
-}, { passive: true });
+    // Swipe-to-rotate (ONLY in guide)
+    let swipeX = null;
+    let swipeY = null;
 
-clickLayer.addEventListener('touchend', () => {
-  lastX = lastY = null;
-});
-
-
-    function startDrag(e){
+    clickLayer.addEventListener('touchstart', (e) => {
       const active = document.querySelector('.state.active')?.id;
       if (active !== "state-guide") return;
 
-      dragging = true;
+      const t = e.touches[0];
+      swipeX = t.clientX;
+      swipeY = t.clientY;
+    }, { passive: true });
 
-      const p = getPoint(e);
-      const r = arrow.getBoundingClientRect();
-      offsetX = p.x - r.left;
-      offsetY = p.y - r.top;
+    clickLayer.addEventListener('touchmove', (e) => {
+      const active = document.querySelector('.state.active')?.id;
+      if (active !== "state-guide") return;
+      if (swipeX === null || swipeY === null) return;
 
-      lastX = p.x;
-      lastY = p.y;
+      const t = e.touches[0];
+      const dx = t.clientX - swipeX;
+      const dy = t.clientY - swipeY;
 
-      // Prevent clickLayer + scrolling
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    function moveDrag(e){
-      if (!dragging) return;
-
-      const p = getPoint(e);
-
-      // Position
-      const x = p.x - offsetX;
-      const y = p.y - offsetY;
-
-      arrow.style.left = `${x}px`;
-      arrow.style.top  = `${y}px`;
-      arrow.style.bottom = "auto";
-
-      // Direction -> rotate
-      if (lastX !== null && lastY !== null) {
-        const dx = p.x - lastX;
-        const dy = p.y - lastY;
-
-        // Add a small deadzone to prevent jitter
-        const dead = 2;
-        if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
-          if (Math.abs(dx) > Math.abs(dy)) {
-            // left/right
-            applyArrowRotation(dx > 0 ? 90 : 270);
-          } else {
-            // up/down
-            applyArrowRotation(dy > 0 ? 180 : 0);
-          }
+      const dead = 10; // 防抖：越大越不敏感
+      if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // left/right
+          applyArrowRotation(dx > 0 ? 90 : 270);
+        } else {
+          // up/down
+          applyArrowRotation(dy > 0 ? 180 : 0);
         }
+        swipeX = t.clientX;
+        swipeY = t.clientY;
       }
+    }, { passive: true });
 
-      lastX = p.x;
-      lastY = p.y;
-
-      e.preventDefault();
-    }
-
-    function endDrag(){
-      dragging = false;
-      lastX = null;
-      lastY = null;
-    }
+    clickLayer.addEventListener('touchend', () => {
+      swipeX = swipeY = null;
+    });
 
     // If arrow.png missing, still allow page to work
     arrow.addEventListener('error', () => {
       arrow.style.display = "none";
       console.warn("arrow.png not found. Place arrow.png next to index.html.");
     });
-
-    // Drag listeners
-    arrow.addEventListener('touchstart', startDrag, { passive: false });
-    window.addEventListener('touchmove', moveDrag, { passive: false });
-    window.addEventListener('touchend', endDrag);
-
-    arrow.addEventListener('mousedown', startDrag);
-    window.addEventListener('mousemove', moveDrag);
-    window.addEventListener('mouseup', endDrag);
   </script>
 </body>
 </html>
-
-
 
