@@ -3,30 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>WebAR Route Prototype</title>
+  <title>WebAR Flow Prototype</title>
 
   <style>
     :root{
-      /* JS 会写入 --vh 来避免手机地址栏导致的走位 */
-      --vh: 1vh;
-
+      --vh: 1vh;                 /* JS 更新，避免手机地址栏导致的走位 */
       --yellow: #F5C542;
       --green: #34C759;
+      --red: #FF3B30;
       --shadow: 0 12px 30px rgba(0,0,0,.35);
     }
 
     html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
       overflow: hidden;
       background: #000;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     }
 
     /* Camera full screen */
-    #camera {
+    #camera{
       position: fixed;
       inset: 0;
       width: 100%;
@@ -37,148 +34,117 @@
     }
 
     /* UI overlay */
-    #ui {
+    #ui{
       position: fixed;
       inset: 0;
       height: calc(var(--vh) * 100);
       z-index: 10;
-      pointer-events: none; /* 默认不挡点按 */
+      pointer-events: none;
     }
 
-    /* Back button (optional) */
+    /* State containers */
+    .state{
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .state.active{ display: flex; }
+
+    /* Click layer to advance */
+    #clickLayer{
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      background: transparent;
+    }
+
+    /* Back button (hidden on Start Scan) */
     .back {
       position: absolute;
       top: env(safe-area-inset-top, 0);
       left: 12px;
       margin-top: 10px;
-      width: 44px;
-      height: 44px;
+      width: 44px; height: 44px;
       border-radius: 14px;
       background: rgba(255,255,255,.12);
       backdrop-filter: blur(10px);
-      display: grid;
+      border: 1px solid rgba(255,255,255,.15);
+      display: none;            /* 由 JS 控制显示 */
       place-items: center;
       pointer-events: auto;
       cursor: pointer;
-      border: 1px solid rgba(255,255,255,.15);
+      z-index: 20;
+    }
+    .back img{
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      opacity: .95;
     }
     .back svg { opacity: .95; }
 
-    /* Intro overlay */
-    #intro {
+    /* Helper demo buttons (optional) */
+    .demoBtns{
       position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      background: rgba(0,0,0,.08);
-      pointer-events: auto; /* 允许点击 */
+      right: 12px;
+      top: calc(env(safe-area-inset-top, 0) + 12px);
+      display: none;
+      gap: 10px;
+      pointer-events: auto;
+      z-index: 20;
+    }
+    .btn{
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.28);
+      color: rgba(255,255,255,.95);
+      backdrop-filter: blur(10px);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
     }
 
-    .tap {
+    /* Bottom hint */
+    .tap-hint{
       position: absolute;
-      bottom: calc(env(safe-area-inset-bottom, 0) + 28px);
       width: 100%;
-      text-align: center;
-      color: rgba(255,255,255,.9);
+      bottom: calc(env(safe-area-inset-bottom, 0) + 26px);
+      left: 0;
+      color: rgba(255,255,255,.92);
       font-size: 16px;
+      text-shadow: 0 8px 22px rgba(0,0,0,.5);
       letter-spacing: .2px;
-      text-shadow: 0 6px 18px rgba(0,0,0,.45);
-    }
-
-    /* Route container - "贴地感" */
-    #route {
-      position: absolute;
-      left: 50%;
-      bottom: 22%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
-      pointer-events: none;
-      opacity: 0;
-      transform-origin: center;
-      transition: opacity .25s ease;
-    }
-
-    /* Dot base */
-    .dot {
-      width: 16px;
-      height: 16px;
-      background: var(--yellow);
-      border-radius: 50%;
-      box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
-      animation: pulse 1.6s infinite ease-in-out;
-      will-change: opacity, transform;
-    }
-
-    /* 透视感：越远越小越淡 */
-    .dot:nth-child(1) { opacity: 0.35; transform: scale(0.75) scaleY(0.92); animation-delay: 0s; }
-    .dot:nth-child(2) { opacity: 0.55; transform: scale(0.85) scaleY(0.92); animation-delay: 0.2s; }
-    .dot:nth-child(3) { opacity: 0.80; transform: scale(0.95) scaleY(0.92); animation-delay: 0.4s; }
-    .dot:nth-child(4) { opacity: 1.00; transform: scale(1.00) scaleY(0.92); animation-delay: 0.6s; }
-
-    /* 流动感：克制的“呼吸” */
-    @keyframes pulse {
-      0%   { filter: brightness(0.95); }
-      50%  { filter: brightness(1.15); }
-      100% { filter: brightness(0.95); }
-    }
-
-    /* Optional: subtle ground glow */
-    .dot::after{
-      content:"";
-      display:block;
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      box-shadow: 0 0 22px rgba(245,197,66,.55);
-      opacity: .35;
-    }
-
-    /* Detected banner */
-    #detected {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -54%);
-      text-align: center;
-      opacity: 0;
-      transition: opacity .25s ease, transform .25s ease;
       pointer-events: none;
     }
 
-    .check {
-      width: 120px;
-      height: 120px;
-      border-radius: 28px;
-      background: var(--green);
-      display: grid;
-      place-items: center;
-      margin: 0 auto 10px auto;
-      box-shadow: var(--shadow);
+    /* Center card (Start) */
+    .card{
+      background: rgba(0,0,0,.32);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 18px;
+      padding: 14px 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 28px rgba(0,0,0,.25);
+      max-width: 78%;
+    }
+    .title{
+      font-size: 18px;
+      font-weight: 750;
+      color: rgba(255,255,255,.95);
+      margin: 0 0 6px 0;
+    }
+    .sub{
+      font-size: 14px;
+      color: rgba(255,255,255,.82);
+      margin: 0;
     }
 
-    .detected-text {
-      font-weight: 800;
-      font-size: 46px;
-      line-height: 1.05;
-      color: var(--yellow);
-      text-shadow: 0 10px 24px rgba(0,0,0,.45);
-      letter-spacing: .4px;
-    }
-
-    /* 状态：运行中 */
-    body.is-running #route { opacity: 1; }
-    /* 状态：检测到 */
-    body.is-detected #detected {
-      opacity: 1;
-      transform: translate(-50%, -58%);
-    }
-
-    /* Small hint */
-    .hint {
+    /* Stage chip */
+    .stage-chip{
       position: absolute;
       top: calc(env(safe-area-inset-top, 0) + 70px);
       left: 50%;
@@ -191,10 +157,97 @@
       font-size: 13px;
       backdrop-filter: blur(10px);
       pointer-events: none;
-      opacity: 0;
-      transition: opacity .25s ease;
     }
-    body.is-running .hint { opacity: 1; }
+
+    /* Path trapezoid placement (贴地) */
+    .path-wrap{
+      position: absolute;
+      left: 50%;
+      bottom: 6%;
+      transform: translateX(-50%);
+      width: min(88vw, 560px);
+      pointer-events: none;
+      filter: drop-shadow(0 14px 24px rgba(0,0,0,.35));
+      opacity: .92;
+    }
+    .path-img{
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Scanning pulse */
+    .scanning{
+      animation: scanPulse 1.25s ease-in-out infinite;
+    }
+    @keyframes scanPulse{
+      0%   { transform: translateX(-50%) scale(0.995); opacity: .78; }
+      50%  { transform: translateX(-50%) scale(1.01);  opacity: .92; }
+      100% { transform: translateX(-50%) scale(0.995); opacity: .78; }
+    }
+
+    /* Detected OK/NO text */
+    .big{
+      font-weight: 900;
+      font-size: 44px;
+      line-height: 1.05;
+      color: var(--yellow);
+      text-shadow: 0 12px 28px rgba(0,0,0,.45);
+      margin-top: 10px;
+    }
+
+    .iconBox{
+      width: 118px; height: 118px;
+      border-radius: 28px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 10px auto;
+      box-shadow: var(--shadow);
+    }
+    .okBox{ background: var(--green); }
+    .noBox{ background: var(--red); }
+
+    /* Guide dots */
+    #route{
+      position: absolute;
+      left: 50%;
+      bottom: 22%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
+      pointer-events: none;
+    }
+    .dot{
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--yellow);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
+      animation: pulse 1.6s infinite ease-in-out;
+      will-change: filter, transform;
+    }
+    .dot::after{
+      content:"";
+      display:block;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow: 0 0 22px rgba(245,197,66,.55);
+      opacity: .35;
+    }
+    .dot:nth-child(1){ opacity:.35; transform: scale(.75) scaleY(.90); animation-delay:0s; }
+    .dot:nth-child(2){ opacity:.55; transform: scale(.85) scaleY(.90); animation-delay:.2s; }
+    .dot:nth-child(3){ opacity:.80; transform: scale(.95) scaleY(.90); animation-delay:.4s; }
+    .dot:nth-child(4){ opacity:1;    transform: scale(1)   scaleY(.90); animation-delay:.6s; }
+
+    @keyframes pulse{
+      0%   { filter: brightness(.95); }
+      50%  { filter: brightness(1.18); }
+      100% { filter: brightness(.95); }
+    }
   </style>
 </head>
 
@@ -202,41 +255,94 @@
   <video id="camera" autoplay playsinline muted></video>
 
   <div id="ui">
-    <!-- Optional back -->
-    <div class="back" onclick="location.reload()" aria-label="Back">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+    <!-- Back button (JS 控制显示/隐藏) -->
+    <div class="back" id="backBtn" aria-label="Back">
+      <!-- 如果你有 back.png，会自动显示图片；没有就用 SVG -->
+      <img id="backImg" src="back.png" alt="Back" style="display:none;" />
+      <svg id="backSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" style="display:block;">
         <path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
 
-    <div class="hint">Tap to toggle “Detected”</div>
-
-    <!-- Route dots -->
-    <div id="route" aria-hidden="true">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
+    <!-- Optional demo helper buttons -->
+    <div class="demoBtns" id="demoBtns">
+      <button class="btn" id="btnOK">Force OK</button>
+      <button class="btn" id="btnNO">Force NO</button>
     </div>
 
-    <!-- Detected UI -->
-    <div id="detected" aria-hidden="true">
-      <div class="check">
-        <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
-          <path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+    <!-- Transparent click layer -->
+    <div id="clickLayer"></div>
+
+    <!-- START -->
+    <div class="state active" id="state-start">
+      <div class="card">
+        <p class="title">Start Scan</p>
+        <p class="sub">Tap anywhere to start scanning</p>
       </div>
-      <div class="detected-text">Accessible Route<br/>Detected</div>
+      <div class="tap-hint">Tap anywhere to continue</div>
     </div>
 
-    <!-- Tap anywhere to continue -->
-    <div id="intro">
-      <div class="tap">Tap anywhere to continue</div>
+    <!-- SCANNING -->
+    <div class="state" id="state-scan">
+      <div class="stage-chip">Scanning environment…</div>
+      <div class="path-wrap scanning">
+        <img class="path-img" src="path_ok.png" alt="Scanning surface" />
+      </div>
+      <div class="tap-hint">Tap to skip</div>
+    </div>
+
+    <!-- DETECTED OK -->
+    <div class="state" id="state-ok">
+      <div class="path-wrap">
+        <img class="path-img" src="path_ok.png" alt="Accessible path" />
+      </div>
+
+      <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-58%); width:100%;">
+        <div class="iconBox okBox">
+          <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
+            <path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="big">Accessible Route<br/>Detected</div>
+      </div>
+
+      <div class="tap-hint">Tap to start guidance</div>
+    </div>
+
+    <!-- DETECTED NO -->
+    <div class="state" id="state-no">
+      <div class="path-wrap">
+        <img class="path-img" src="path_no.png" alt="Not accessible path" />
+      </div>
+
+      <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-58%); width:100%;">
+        <div class="iconBox noBox">
+          <svg width="68" height="68" viewBox="0 0 24 24" fill="none">
+            <path d="M12 9v5" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M12 17h.01" stroke="white" stroke-width="3.4" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="big">Route Not<br/>Accessible</div>
+      </div>
+
+      <div class="tap-hint">Tap to rescan</div>
+    </div>
+
+    <!-- GUIDE -->
+    <div class="state" id="state-guide">
+      <div class="stage-chip">Guidance</div>
+      <div id="route" aria-hidden="true">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <div class="tap-hint">Tap to end</div>
     </div>
   </div>
 
   <script>
-    // Fix mobile viewport height drifting (address bar / camera)
+    // Fix mobile viewport height drifting
     function setVH() {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -245,11 +351,15 @@
     window.addEventListener('orientationchange', setVH);
     setVH();
 
-    const video = document.getElementById('camera');
-    const intro = document.getElementById('intro');
+    // Back icon fallback: if back.png fails, use SVG
+    const backImg = document.getElementById('backImg');
+    const backSvg = document.getElementById('backSvg');
+    backImg.onload = () => { backImg.style.display = "block"; backSvg.style.display = "none"; };
+    backImg.onerror = () => { backImg.style.display = "none"; backSvg.style.display = "block"; };
 
+    // Camera
+    const video = document.getElementById('camera');
     async function startCamera() {
-      // Prefer back camera
       const constraints = {
         audio: false,
         video: {
@@ -258,34 +368,99 @@
           height: { ideal: 720 }
         }
       };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+    }
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        await video.play();
-      } catch (err) {
-        alert("Camera cannot be started.\n\nTry:\n- HTTPS (GitHub Pages is OK)\n- Allow camera permission\n- Use Chrome\n\nError: " + err.message);
-        console.error(err);
+    // States
+    const states = ["state-start", "state-scan", "state-ok", "state-no", "state-guide"];
+    const backBtn = document.getElementById('backBtn');
+    const demoBtns = document.getElementById('demoBtns');
+
+    function show(id){
+      for (const s of states) {
+        document.getElementById(s).classList.remove('active');
+      }
+      document.getElementById(id).classList.add('active');
+
+      // Back visibility: start scan 不显示，其它都显示
+      if (id === "state-start") {
+        backBtn.style.display = "none";
+      } else {
+        backBtn.style.display = "grid";
       }
     }
 
-    // Tap to continue: start camera + show route
-    intro.addEventListener('click', async () => {
-      intro.style.display = 'none';
-      await startCamera();
-      document.body.classList.add('is-running');
+    // Back action: always return to Start Scan (no reload, camera keeps running)
+    backBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // 不要触发 clickLayer
+      show("state-start");
     });
 
-    // Tap anywhere to toggle detected UI (demo)
-    document.addEventListener('click', (e) => {
-      // avoid double triggering on intro
-      if (intro.style.display !== 'none') return;
-      // toggle detected state
-      document.body.classList.toggle('is-detected');
+    // Demo OK/NO buttons
+    let lastResult = "ok"; // default
+    document.getElementById('btnOK').addEventListener('click', (e) => {
+      e.stopPropagation();
+      lastResult = "ok";
+      show("state-ok");
+    });
+    document.getElementById('btnNO').addEventListener('click', (e) => {
+      e.stopPropagation();
+      lastResult = "no";
+      show("state-no");
     });
 
-    // Safety: if user already granted permission and browser autoplay works, you can optionally auto-start
-    // (but for mobile, tap-first is more reliable).
+    // Scan flow
+    let started = false;
+    let scanTimer = null;
+
+    function startScan(){
+      show("state-scan");
+      if (scanTimer) clearTimeout(scanTimer);
+      scanTimer = setTimeout(() => {
+        show(lastResult === "ok" ? "state-ok" : "state-no");
+      }, 1400);
+    }
+
+    // Tap to advance
+    const clickLayer = document.getElementById('clickLayer');
+    clickLayer.addEventListener('click', async () => {
+      const active = document.querySelector('.state.active')?.id;
+
+      // First tap: start camera then go scanning
+      if (!started) {
+        try {
+          await startCamera();
+          started = true;
+          demoBtns.style.display = "flex"; // optional helper buttons
+          startScan();
+        } catch (err) {
+          alert(
+            "Camera cannot be started.\n\nTry:\n- Allow camera permission\n- Use Chrome\n- Ensure HTTPS (GitHub Pages)\n\nError: " + err.message
+          );
+          console.error(err);
+        }
+        return;
+      }
+
+      // Next steps
+      if (active === "state-start") {
+        startScan();
+      } else if (active === "state-scan") {
+        // skip scan
+        show(lastResult === "ok" ? "state-ok" : "state-no");
+      } else if (active === "state-ok") {
+        show("state-guide");
+      } else if (active === "state-no") {
+        // rescan
+        startScan();
+      } else if (active === "state-guide") {
+        // end -> back to start
+        show("state-start");
+      }
+    });
   </script>
 </body>
 </html>
+
