@@ -76,7 +76,7 @@
       place-items: center;
       pointer-events: auto;
       cursor: pointer;
-      z-index: 20;
+      z-index: 30;
     }
     .back img{
       width: 22px;
@@ -94,7 +94,7 @@
       display: none;
       gap: 10px;
       pointer-events: auto;
-      z-index: 20;
+      z-index: 30;
     }
     .btn{
       padding: 10px 12px;
@@ -176,16 +176,6 @@
       display: block;
     }
 
-    /* Scanning pulse */
-    .scanning{
-      animation: scanPulse 1.25s ease-in-out infinite;
-    }
-    @keyframes scanPulse{
-      0%   { transform: translateX(-50%) scale(0.995); opacity: .78; }
-      50%  { transform: translateX(-50%) scale(1.01);  opacity: .92; }
-      100% { transform: translateX(-50%) scale(0.995); opacity: .78; }
-    }
-
     /* Detected OK/NO text */
     .big{
       font-weight: 900;
@@ -219,6 +209,7 @@
       gap: 14px;
       filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
       pointer-events: none;
+      z-index: 10;
     }
     .dot{
       width: 16px;
@@ -248,6 +239,24 @@
       50%  { filter: brightness(1.18); }
       100% { filter: brightness(.95); }
     }
+
+    /* Draggable arrow (guide only) */
+    #arrow{
+      position: absolute;
+      left: 50%;
+      bottom: 34%;
+      transform: translateX(-50%);
+      width: 90px;
+      height: auto;
+      z-index: 25;
+
+      pointer-events: auto; /* 关键：允许拖拽 */
+      touch-action: none;   /* 关键：防止手机把拖动当滚动 */
+      user-select: none;
+      -webkit-user-drag: none;
+      filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
+      display: none;        /* 只有 guide state 才显示 */
+    }
   </style>
 </head>
 
@@ -255,9 +264,9 @@
   <video id="camera" autoplay playsinline muted></video>
 
   <div id="ui">
-    <!-- Back button (JS 控制显示/隐藏) -->
+    <!-- Back button -->
     <div class="back" id="backBtn" aria-label="Back">
-      <!-- 如果你有 back.png，会自动显示图片；没有就用 SVG -->
+      <!-- 有 back.png 会显示图片；没有就自动用 SVG -->
       <img id="backImg" src="back.png" alt="Back" style="display:none;" />
       <svg id="backSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" style="display:block;">
         <path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -282,19 +291,19 @@
       <div class="tap-hint">Tap anywhere to continue</div>
     </div>
 
-    <!-- SCANNING -->
+    <!-- SCANNING (空：不放 path) -->
     <div class="state" id="state-scan">
-  <div class="stage-chip">Scanning environment…</div>
-  <div class="tap-hint">Tap to skip</div>
-</div>
+      <div class="stage-chip">Scanning environment…</div>
+      <div class="tap-hint">Tap to skip</div>
+    </div>
 
-
-    <!-- DETECTED OK -->
+    <!-- DETECTED OK (path_ok + 勾 + 文字往上移) -->
     <div class="state" id="state-ok">
       <div class="path-wrap">
         <img class="path-img" src="path_ok.png" alt="Accessible path" />
       </div>
 
+      <!-- 往上移：top:46%（你要再上就调 44/42） -->
       <div style="position:absolute; left:50%; top:46%; transform:translate(-50%,-58%); width:100%;">
         <div class="iconBox okBox">
           <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
@@ -307,7 +316,7 @@
       <div class="tap-hint">Tap to start guidance</div>
     </div>
 
-    <!-- DETECTED NO -->
+    <!-- DETECTED NO (path_no + X/警告 + 文字往上移) -->
     <div class="state" id="state-no">
       <div class="path-wrap">
         <img class="path-img" src="path_no.png" alt="Not accessible path" />
@@ -326,23 +335,22 @@
       <div class="tap-hint">Tap to rescan</div>
     </div>
 
-    <!-- GUIDE -->
+    <!-- GUIDE (dots + draggable arrow) -->
     <div class="state" id="state-guide">
-  <div class="stage-chip">Guidance</div>
+      <div class="stage-chip">Guidance</div>
 
-  <!-- 可拖拽箭头 -->
-  <img id="arrow" src="arrow.png" alt="Arrow" />
+      <!-- 需要同目录 arrow.png -->
+      <img id="arrow" src="arrow.png" alt="Arrow" />
 
-  <div id="route" aria-hidden="true">
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <div class="dot"></div>
-    <div class="dot"></div>
-  </div>
+      <div id="route" aria-hidden="true">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
 
-  <div class="tap-hint">Drag the arrow • Tap to end</div>
-</div>
-
+      <div class="tap-hint">Drag the arrow • Tap to end</div>
+    </div>
   </div>
 
   <script>
@@ -355,7 +363,7 @@
     window.addEventListener('orientationchange', setVH);
     setVH();
 
-    // Back icon fallback: if back.png fails, use SVG
+    // Back icon fallback
     const backImg = document.getElementById('backImg');
     const backSvg = document.getElementById('backSvg');
     backImg.onload = () => { backImg.style.display = "block"; backSvg.style.display = "none"; };
@@ -381,6 +389,7 @@
     const states = ["state-start", "state-scan", "state-ok", "state-no", "state-guide"];
     const backBtn = document.getElementById('backBtn');
     const demoBtns = document.getElementById('demoBtns');
+    const arrow = document.getElementById('arrow');
 
     function show(id){
       for (const s of states) {
@@ -389,21 +398,22 @@
       document.getElementById(id).classList.add('active');
 
       // Back visibility: start scan 不显示，其它都显示
-      if (id === "state-start") {
-        backBtn.style.display = "none";
-      } else {
-        backBtn.style.display = "grid";
-      }
+      if (id === "state-start") backBtn.style.display = "none";
+      else backBtn.style.display = "grid";
+
+      // Arrow only on guide
+      if (id === "state-guide") arrow.style.display = "block";
+      else arrow.style.display = "none";
     }
 
     // Back action: always return to Start Scan (no reload, camera keeps running)
     backBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // 不要触发 clickLayer
+      e.stopPropagation();
       show("state-start");
     });
 
     // Demo OK/NO buttons
-    let lastResult = "ok"; // default
+    let lastResult = "ok";
     document.getElementById('btnOK').addEventListener('click', (e) => {
       e.stopPropagation();
       lastResult = "ok";
@@ -415,7 +425,7 @@
       show("state-no");
     });
 
-    // Scan flow
+    // Scan flow (scanning 空，但还是有 delay)
     let started = false;
     let scanTimer = null;
 
@@ -424,10 +434,10 @@
       if (scanTimer) clearTimeout(scanTimer);
       scanTimer = setTimeout(() => {
         show(lastResult === "ok" ? "state-ok" : "state-no");
-      }, 1400);
+      }, 1200);
     }
 
-    // Tap to advance
+    // Tap to advance (except dragging arrow)
     const clickLayer = document.getElementById('clickLayer');
     clickLayer.addEventListener('click', async () => {
       const active = document.querySelector('.state.active')?.id;
@@ -464,9 +474,67 @@
         show("state-start");
       }
     });
+
+    // Draggable arrow (touch + mouse)
+    let dragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    function getPoint(e){
+      if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      return { x: e.clientX, y: e.clientY };
+    }
+
+    function startDrag(e){
+      // only allow drag when guide is active
+      const active = document.querySelector('.state.active')?.id;
+      if (active !== "state-guide") return;
+
+      dragging = true;
+
+      const p = getPoint(e);
+      const r = arrow.getBoundingClientRect();
+      offsetX = p.x - r.left;
+      offsetY = p.y - r.top;
+
+      // prevent clickLayer + scrolling
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    function moveDrag(e){
+      if (!dragging) return;
+
+      const p = getPoint(e);
+      const x = p.x - offsetX;
+      const y = p.y - offsetY;
+
+      arrow.style.left = `${x}px`;
+      arrow.style.top  = `${y}px`;
+      arrow.style.bottom = "auto";
+      arrow.style.transform = "none";
+
+      e.preventDefault();
+    }
+
+    function endDrag(){
+      dragging = false;
+    }
+
+    // If arrow.png missing, still allow page to work (arrow will just not show)
+    arrow.addEventListener('error', () => {
+      arrow.style.display = "none";
+      console.warn("arrow.png not found. Place arrow.png next to index.html if you want the draggable arrow.");
+    });
+
+    // Drag listeners
+    arrow.addEventListener('touchstart', startDrag, { passive: false });
+    window.addEventListener('touchmove', moveDrag, { passive: false });
+    window.addEventListener('touchend', endDrag);
+
+    arrow.addEventListener('mousedown', startDrag);
+    window.addEventListener('mousemove', moveDrag);
+    window.addEventListener('mouseup', endDrag);
   </script>
 </body>
 </html>
-
-
 
