@@ -7,7 +7,7 @@
 
   <style>
     :root{
-      --vh: 1vh;                 /* JS 更新，避免手机地址栏导致的走位 */
+      --vh: 1vh;
       --yellow: #F5C542;
       --green: #34C759;
       --red: #FF3B30;
@@ -61,7 +61,7 @@
       background: transparent;
     }
 
-    /* Back button (hidden on Start Scan) */
+    /* Back button */
     .back {
       position: absolute;
       top: env(safe-area-inset-top, 0);
@@ -72,7 +72,7 @@
       background: rgba(255,255,255,.12);
       backdrop-filter: blur(10px);
       border: 1px solid rgba(255,255,255,.15);
-      display: none;            /* 由 JS 控制显示 */
+      display: none;            /* JS 控制显示 */
       place-items: center;
       pointer-events: auto;
       cursor: pointer;
@@ -86,7 +86,7 @@
     }
     .back svg { opacity: .95; }
 
-    /* Helper demo buttons (optional) */
+    /* Optional demo helper buttons */
     .demoBtns{
       position: absolute;
       right: 12px;
@@ -240,22 +240,25 @@
       100% { filter: brightness(.95); }
     }
 
-    /* Draggable arrow (guide only) */
+    /* Draggable arrow */
     #arrow{
       position: absolute;
       left: 50%;
       bottom: 34%;
-      transform: translateX(-50%);
-      width: 60px;
+      transform: translateX(-50%) rotate(0deg); /* 0deg = ↑ */
+      transform-origin: center center;
+      width: 72px;     /* ✅ 这里调大小 */
       height: auto;
       z-index: 25;
 
-      pointer-events: auto; /* 关键：允许拖拽 */
-      touch-action: none;   /* 关键：防止手机把拖动当滚动 */
+      pointer-events: auto;
+      touch-action: none;
       user-select: none;
       -webkit-user-drag: none;
+
       filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
-      display: none;        /* 只有 guide state 才显示 */
+      transition: transform 0.12s ease-out; /* 更顺滑 */
+      display: none;  /* only on guide */
     }
   </style>
 </head>
@@ -266,7 +269,6 @@
   <div id="ui">
     <!-- Back button -->
     <div class="back" id="backBtn" aria-label="Back">
-      <!-- 有 back.png 会显示图片；没有就自动用 SVG -->
       <img id="backImg" src="back.png" alt="Back" style="display:none;" />
       <svg id="backSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" style="display:block;">
         <path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -291,13 +293,13 @@
       <div class="tap-hint">Tap anywhere to continue</div>
     </div>
 
-    <!-- SCANNING (空：不放 path) -->
+    <!-- SCANNING (空) -->
     <div class="state" id="state-scan">
       <div class="stage-chip">Scanning environment…</div>
       <div class="tap-hint">Tap to skip</div>
     </div>
 
-    <!-- DETECTED OK (path_ok + 勾 + 文字往上移) -->
+    <!-- DETECTED OK -->
     <div class="state" id="state-ok">
       <div class="path-wrap">
         <img class="path-img" src="path_ok.png" alt="Accessible path" />
@@ -316,7 +318,7 @@
       <div class="tap-hint">Tap to start guidance</div>
     </div>
 
-    <!-- DETECTED NO (path_no + X/警告 + 文字往上移) -->
+    <!-- DETECTED NO -->
     <div class="state" id="state-no">
       <div class="path-wrap">
         <img class="path-img" src="path_no.png" alt="Not accessible path" />
@@ -335,11 +337,10 @@
       <div class="tap-hint">Tap to rescan</div>
     </div>
 
-    <!-- GUIDE (dots + draggable arrow) -->
+    <!-- GUIDE -->
     <div class="state" id="state-guide">
       <div class="stage-chip">Guidance</div>
 
-      <!-- 需要同目录 arrow.png -->
       <img id="arrow" src="arrow.png" alt="Arrow" />
 
       <div id="route" aria-hidden="true">
@@ -392,21 +393,24 @@
     const arrow = document.getElementById('arrow');
 
     function show(id){
-      for (const s of states) {
-        document.getElementById(s).classList.remove('active');
-      }
+      for (const s of states) document.getElementById(s).classList.remove('active');
       document.getElementById(id).classList.add('active');
 
       // Back visibility: start scan 不显示，其它都显示
-      if (id === "state-start") backBtn.style.display = "none";
-      else backBtn.style.display = "grid";
+      backBtn.style.display = (id === "state-start") ? "none" : "grid";
 
       // Arrow only on guide
-      if (id === "state-guide") arrow.style.display = "block";
-      else arrow.style.display = "none";
+      arrow.style.display = (id === "state-guide") ? "block" : "none";
+
+      // When entering guide, ensure arrow has a default orientation (up)
+      if (id === "state-guide") {
+        // If user previously dragged it, keep its position but reset orientation
+        arrow.dataset.rot = "0";
+        applyArrowRotation(0);
+      }
     }
 
-    // Back action: always return to Start Scan (no reload, camera keeps running)
+    // Back action: always return to Start Scan
     backBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       show("state-start");
@@ -425,7 +429,7 @@
       show("state-no");
     });
 
-    // Scan flow (scanning 空，但还是有 delay)
+    // Scan flow
     let started = false;
     let scanTimer = null;
 
@@ -437,7 +441,7 @@
       }, 1200);
     }
 
-    // Tap to advance (except dragging arrow)
+    // Tap to advance
     const clickLayer = document.getElementById('clickLayer');
     clickLayer.addEventListener('click', async () => {
       const active = document.querySelector('.state.active')?.id;
@@ -447,7 +451,7 @@
         try {
           await startCamera();
           started = true;
-          demoBtns.style.display = "flex"; // optional helper buttons
+          demoBtns.style.display = "flex"; // optional helper
           startScan();
         } catch (err) {
           alert(
@@ -462,30 +466,33 @@
       if (active === "state-start") {
         startScan();
       } else if (active === "state-scan") {
-        // skip scan
         show(lastResult === "ok" ? "state-ok" : "state-no");
       } else if (active === "state-ok") {
         show("state-guide");
       } else if (active === "state-no") {
-        // rescan
         startScan();
       } else if (active === "state-guide") {
-        // end -> back to start
         show("state-start");
       }
     });
 
-    // Draggable arrow (touch + mouse)
+    // ---- Draggable + auto-rotate arrow ----
     let dragging = false;
     let offsetX = 0, offsetY = 0;
+    let lastX = null, lastY = null;
 
     function getPoint(e){
       if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
 
+    function applyArrowRotation(deg){
+      // Keep current translation removed (we set left/top during drag)
+      arrow.dataset.rot = String(deg);
+      arrow.style.transform = `rotate(${deg}deg)`;
+    }
+
     function startDrag(e){
-      // only allow drag when guide is active
       const active = document.querySelector('.state.active')?.id;
       if (active !== "state-guide") return;
 
@@ -496,7 +503,10 @@
       offsetX = p.x - r.left;
       offsetY = p.y - r.top;
 
-      // prevent clickLayer + scrolling
+      lastX = p.x;
+      lastY = p.y;
+
+      // Prevent clickLayer + scrolling
       e.preventDefault();
       e.stopPropagation();
     }
@@ -505,25 +515,49 @@
       if (!dragging) return;
 
       const p = getPoint(e);
+
+      // Position
       const x = p.x - offsetX;
       const y = p.y - offsetY;
 
       arrow.style.left = `${x}px`;
       arrow.style.top  = `${y}px`;
       arrow.style.bottom = "auto";
-      arrow.style.transform = "none";
+
+      // Direction -> rotate
+      if (lastX !== null && lastY !== null) {
+        const dx = p.x - lastX;
+        const dy = p.y - lastY;
+
+        // Add a small deadzone to prevent jitter
+        const dead = 2;
+        if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
+          if (Math.abs(dx) > Math.abs(dy)) {
+            // left/right
+            applyArrowRotation(dx > 0 ? 90 : 270);
+          } else {
+            // up/down
+            applyArrowRotation(dy > 0 ? 180 : 0);
+          }
+        }
+      }
+
+      lastX = p.x;
+      lastY = p.y;
 
       e.preventDefault();
     }
 
     function endDrag(){
       dragging = false;
+      lastX = null;
+      lastY = null;
     }
 
-    // If arrow.png missing, still allow page to work (arrow will just not show)
+    // If arrow.png missing, still allow page to work
     arrow.addEventListener('error', () => {
       arrow.style.display = "none";
-      console.warn("arrow.png not found. Place arrow.png next to index.html if you want the draggable arrow.");
+      console.warn("arrow.png not found. Place arrow.png next to index.html.");
     });
 
     // Drag listeners
@@ -537,5 +571,4 @@
   </script>
 </body>
 </html>
-
 
