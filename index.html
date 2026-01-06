@@ -3,208 +3,180 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>OpenWay WebAR</title>
-
+  <title>OpenWay WebXR AR Demo</title>
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: #000;
-      overflow: hidden;
-    }
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; }
 
-    /* camera */
-    #cam {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 0;
+    /* Simple UI */
+    #btn{
+      position:fixed; left:50%; bottom:56px; transform:translateX(-50%);
+      padding:12px 16px; border-radius:12px; border:0;
+      font:14px system-ui; z-index:20;
     }
-
-    /* UI overlay */
-    #ui {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      pointer-events: none;
-    }
-
-    .el {
-      position: absolute;
-      user-select: none;
-      -webkit-user-drag: none;
-    }
-
-    /* --- positions (tweak freely) --- */
-    #back {
-      left: 18px;
-      top: 18px;
-      width: 42px;
-      opacity: 0.95;
-    }
-
-    /* scanning */
-    #scanText {
-      left: 50%;
-      top: 22%;
-      transform: translateX(-50%);
-      width: min(82vw, 520px);
-    }
-
-    #scanFrame {
-      left: 50%;
-      top: 52%;
-      transform: translate(-50%, -50%);
-      width: min(72vw, 520px);
-    }
-
-    /* detected */
-    #check {
-      left: 50%;
-      top: 24%;
-      transform: translateX(-50%);
-      width: 120px;
-    }
-
-    #detText {
-      left: 50%;
-      top: 46%;
-      transform: translateX(-50%);
-      width: min(70vw, 520px);
-    }
-
-    /* guide */
-    #arrow {
-      left: 18%;
-      top: 40%;
-      width: 140px;
-    }
-
-    #dots {
-      left: 50%;
-      top: 58%;
-      transform: translateX(-50%);
-      width: min(60vw, 420px);
-    }
-
-    /* blocked */
-    #xmark {
-      left: 50%;
-      top: 30%;
-      transform: translateX(-50%);
-      width: 140px;
-    }
-
-    /* hint */
-    #hint {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 14px;
-      text-align: center;
-      color: #fff;
-      font-size: 12px;
-      opacity: 0.7;
-      letter-spacing: 0.3px;
-      z-index: 20;
-      pointer-events: none;
+    #msg{
+      position:fixed; left:0; right:0; bottom:14px;
+      text-align:center; color:#fff; font:13px system-ui;
+      opacity:.85; z-index:10; pointer-events:none;
     }
   </style>
 </head>
-
 <body>
+  <button id="btn">Start AR</button>
+  <div id="msg">Move your phone to detect the floor, then tap to place the path.</div>
 
-  <!-- Camera -->
-  <video id="cam" autoplay playsinline muted></video>
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
-  <!-- UI elements -->
-  <div id="ui">
-    <img id="back" class="el" src="back.png" alt="Back" />
+    const btn = document.getElementById("btn");
+    const msg = document.getElementById("msg");
 
-    <!-- scanning -->
-    <img id="scanText" class="el" src="scan_text.png" alt="Scan text" />
-    <img id="scanFrame" class="el" src="scan_frame.png" alt="Scan frame" />
+    let renderer, scene, camera;
+    let xrSession, refSpace, viewerSpace, hitTestSource;
+    let reticle;
+    let pathGroup = null;
+    let placedOnce = false;
 
-    <!-- detected -->
-    <img id="check" class="el" src="check.png" alt="Detected" />
-    <img id="detText" class="el" src="detected_text.png" alt="Accessible Route Detected" />
-
-    <!-- guide -->
-    <img id="arrow" class="el" src="arrow.png" alt="Arrow" />
-    <img id="dots" class="el" src="dots.png" alt="Dots" />
-
-    <!-- blocked -->
-    <img id="xmark" class="el" src="x.png" alt="Not Accessible" />
-  </div>
-
-  <div id="hint">Tap anywhere to continue</div>
-
-  <script>
-    /* states */
-    const states = ["scanning", "detected", "guide", "blocked"];
-    let step = 0;
-
-    function show(id, on) {
-      document.getElementById(id).style.display = on ? "" : "none";
+    function makeReticle() {
+      // A small ring to show where the hit-test finds the floor
+      const geo = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0.9 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      mesh.matrixAutoUpdate = false;
+      return mesh;
     }
 
-    function render(state) {
-      // hide all
-      [
-        "scanText","scanFrame",
-        "check","detText",
-        "arrow","dots",
-        "xmark"
-      ].forEach(id => show(id, false));
-
-      // always show back
-      show("back", true);
-
-      if (state === "scanning") {
-        show("scanText", true);
-        show("scanFrame", true);
-      }
-
-      if (state === "detected") {
-        show("check", true);
-        show("detText", true);
-      }
-
-      if (state === "guide") {
-        show("arrow", true);
-        show("dots", true);
-      }
-
-      if (state === "blocked") {
-        show("xmark", true);
-      }
+    async function loadTexture(url) {
+      return await new Promise((resolve, reject) => {
+        new THREE.TextureLoader().load(url, (tex) => resolve(tex), undefined, reject);
+      });
     }
 
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
-        });
-        document.getElementById("cam").srcObject = stream;
-      } catch (e) {
-        alert("Please allow camera access and open on mobile.");
-      }
+    async function makePathGroup() {
+      // Load textures
+      const pathTex = await loadTexture("path_ok.png");
+      const dotsTex = await loadTexture("dots.png");
+
+      pathTex.colorSpace = THREE.SRGBColorSpace;
+      dotsTex.colorSpace = THREE.SRGBColorSpace;
+
+      // IMPORTANT: Do NOT change PNG sizes.
+      // Instead we scale the plane in meters to keep it sharp on mobile.
+      const W = 0.6;  // meters (width)
+      const L = 1.0;  // meters (length)
+
+      const group = new THREE.Group();
+
+      // Path highlight plane
+      const pathMat = new THREE.MeshBasicMaterial({
+        map: pathTex,
+        transparent: true,
+        opacity: 0.85
+      });
+      const pathGeo = new THREE.PlaneGeometry(W, L);
+      const pathMesh = new THREE.Mesh(pathGeo, pathMat);
+      pathMesh.rotation.x = -Math.PI / 2;
+      group.add(pathMesh);
+
+      // Dots plane (slightly above to avoid z-fighting)
+      const dotsMat = new THREE.MeshBasicMaterial({
+        map: dotsTex,
+        transparent: true,
+        opacity: 0.95
+      });
+      const dotsGeo = new THREE.PlaneGeometry(W, L);
+      const dotsMesh = new THREE.Mesh(dotsGeo, dotsMat);
+      dotsMesh.position.y = 0.002; // 2mm above
+      dotsMesh.rotation.x = -Math.PI / 2;
+      group.add(dotsMesh);
+
+      return group;
     }
 
-    /* tap to move next state */
-    document.body.addEventListener("click", () => {
-      step = Math.min(step + 1, states.length - 1);
-      render(states[step]);
-    });
+    async function startAR() {
+      if (!navigator.xr) {
+        alert("WebXR is not supported. Please use Android Chrome.");
+        return;
+      }
 
-    /* init */
-    render(states[0]);
-    startCamera();
+      const supported = await navigator.xr.isSessionSupported("immersive-ar");
+      if (!supported) {
+        alert("immersive-ar is not supported on this device/browser. Try Android Chrome + ARCore.");
+        return;
+      }
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera();
+
+      // Reticle
+      reticle = makeReticle();
+      scene.add(reticle);
+
+      // Start session
+      xrSession = await navigator.xr.requestSession("immersive-ar", {
+        requiredFeatures: ["hit-test"],
+        optionalFeatures: ["dom-overlay"],
+        domOverlay: { root: document.body }
+      });
+
+      renderer.xr.setSession(xrSession);
+
+      refSpace = await xrSession.requestReferenceSpace("local");
+      viewerSpace = await xrSession.requestReferenceSpace("viewer");
+      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+      // Load once
+      pathGroup = await makePathGroup();
+
+      btn.style.display = "none";
+      msg.textContent = "Move your phone to detect the floor. Tap to place the path.";
+
+      // Tap to place / reposition
+      xrSession.addEventListener("select", () => {
+        if (!reticle.visible) return;
+
+        if (!placedOnce) {
+          scene.add(pathGroup);
+          placedOnce = true;
+        }
+
+        // Place where the reticle is
+        pathGroup.position.setFromMatrixPosition(reticle.matrix);
+        // Keep it flat on the floor
+        pathGroup.rotation.set(-Math.PI / 2, 0, 0);
+
+        msg.textContent = "Placed! Tap again to reposition.";
+      });
+
+      xrSession.addEventListener("end", () => {
+        placedOnce = false;
+        btn.style.display = "";
+        msg.textContent = "AR ended.";
+      });
+
+      renderer.setAnimationLoop((t, frame) => {
+        if (frame) {
+          const hits = frame.getHitTestResults(hitTestSource);
+          if (hits.length > 0) {
+            const pose = hits[0].getPose(refSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+        renderer.render(scene, camera);
+      });
+    }
+
+    btn.addEventListener("click", startAR);
   </script>
-
 </body>
 </html>
 
