@@ -4,212 +4,245 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>OpenWay WebAR Prototype</title>
+
   <style>
-    html, body { margin:0; height:100%; overflow:hidden; background:#000; font-family: system-ui; }
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000; }
 
-    /* Fallback camera (getUserMedia) */
-    #cam2d {
+    /* Camera (always full screen) */
+    #cam{
       position:fixed; inset:0;
-      width:100%; height:100%;
+      width:100vw; height:100vh;
       object-fit:cover;
-      display:none;
+      background:#000;
+      z-index:0;
     }
 
-    /* Simple UI */
-    #btn {
-      position:fixed; left:50%; bottom:56px; transform:translateX(-50%);
-      padding:12px 16px; border-radius:12px; border:0;
-      font:14px system-ui; z-index:30;
+    /* UI layer */
+    #ui{
+      position:fixed; inset:0;
+      z-index:10;
+      pointer-events:none;
     }
-    #msg {
+
+    .el{
+      position:absolute;
+      user-select:none;
+      -webkit-user-drag:none;
+      pointer-events:none;
+      transform-origin:center center;
+    }
+
+    /* --- Base positions (you can tweak these) --- */
+
+    /* back icon */
+    #back{
+      left: 16px; top: 16px;
+      width: 44px;
+      opacity: .95;
+    }
+
+    /* scanning text + frame */
+    #scanText{
+      left:50%; top: 18%;
+      transform: translateX(-50%);
+      width: min(84vw, 560px);
+      opacity: .98;
+    }
+    #scanFrame{
+      left:50%; top: 54%;
+      transform: translate(-50%,-50%);
+      width: min(78vw, 560px);
+      opacity: .98;
+    }
+
+    /* detected (CHECK + text)  ← you asked: move check a bit up */
+    #check{
+      left:50%;
+      top: 20%;                /* was lower; move UP by decreasing this */
+      transform: translateX(-50%);
+      width: min(32vw, 140px);
+      opacity: .98;
+    }
+    #detText{
+      left:50%;
+      top: 34%;
+      transform: translateX(-50%);
+      width: min(78vw, 560px);
+      opacity: .98;
+    }
+
+    /* guide (ARROW + DOTS)  ← you asked: arrow move up */
+    #arrow{
+      left: 14%;
+      top: 36%;                /* move UP by decreasing this */
+      width: min(34vw, 180px);
+      opacity: .98;
+    }
+    #dots{
+      left:50%;
+      top: 62%;
+      transform: translateX(-50%);
+      width: min(64vw, 460px);
+      opacity: .98;
+    }
+
+    /* blocked X */
+    #xmark{
+      left:50%; top: 20%;
+      transform: translateX(-50%);
+      width: min(36vw, 160px);
+      opacity: .98;
+    }
+
+    /* Start screen */
+    #start{
+      position:fixed; inset:0;
+      z-index:20;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      gap:12px;
+      background: rgba(0,0,0,.55);
+    }
+    #start button{
+      border:0;
+      border-radius:14px;
+      padding:12px 18px;
+      font: 600 14px system-ui;
+      cursor:pointer;
+    }
+    #start p{
+      margin:0;
+      color:#fff;
+      opacity:.9;
+      font: 13px system-ui;
+      text-align:center;
+      padding: 0 18px;
+    }
+
+    /* Hint */
+    #hint{
       position:fixed; left:0; right:0; bottom:14px;
-      text-align:center; color:#fff; font:13px system-ui;
-      opacity:.85; z-index:20; pointer-events:none;
+      z-index:15;
+      text-align:center;
+      color:#fff;
+      font: 13px system-ui;
+      opacity:.80;
+      pointer-events:none;
       padding:0 14px;
     }
 
-    /* 2D overlay (fallback mode) */
-    #ui2d { position:fixed; inset:0; pointer-events:none; z-index:15; display:none; }
-    .el { position:absolute; user-select:none; -webkit-user-drag:none; }
-
-    /* tweak positions for your design */
-    #pathOk2d { left:50%; top:56%; transform:translateX(-50%); width:min(88vw,560px); opacity:.75; }
-    #dots2d   { left:50%; top:58%; transform:translateX(-50%); width:min(60vw,420px); opacity:.95; }
+    /* Optional: hide hint on desktop wide screens */
+    @media (min-width: 900px){
+      #hint{ opacity:.65; }
+    }
   </style>
 </head>
+
 <body>
-  <button id="btn">Start</button>
-  <div id="msg">Starting…</div>
+  <video id="cam" autoplay playsinline muted></video>
 
-  <!-- Fallback camera layer -->
-  <video id="cam2d" autoplay playsinline muted></video>
+  <div id="ui">
+    <!-- Always visible back icon (visual only) -->
+    <img id="back" class="el" src="back.png" alt="Back" />
 
-  <!-- Fallback 2D overlay -->
-  <div id="ui2d">
-    <img id="pathOk2d" class="el" src="path_ok.png" alt="Path highlight">
-    <img id="dots2d" class="el" src="dots.png" alt="Dots">
+    <!-- SCANNING -->
+    <img id="scanText"  class="el" src="scan_text.png" alt="Scan around to find Accessible Entrance" />
+    <img id="scanFrame" class="el" src="scan_frame.png" alt="Scan frame" />
+
+    <!-- DETECTED -->
+    <img id="check"  class="el" src="check.png" alt="Check" />
+    <img id="detText" class="el" src="detected_text.png" alt="Accessible Route Detected" />
+
+    <!-- GUIDE -->
+    <img id="arrow" class="el" src="arrow.png" alt="Arrow" />
+    <img id="dots"  class="el" src="dots.png" alt="Dots" />
+
+    <!-- BLOCKED -->
+    <img id="xmark" class="el" src="x.png" alt="Not accessible" />
   </div>
 
-  <script type="module">
-    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+  <div id="hint">Tap anywhere to continue</div>
 
-    const btn = document.getElementById("btn");
-    const msg = document.getElementById("msg");
-    const cam2d = document.getElementById("cam2d");
-    const ui2d = document.getElementById("ui2d");
+  <div id="start">
+    <button id="startBtn">Start Camera</button>
+    <p>If you don’t see the camera, please allow camera permission in Chrome.</p>
+  </div>
 
-    // ---------- Fallback: normal camera + 2D overlay ----------
-    async function startFallback2D() {
-      msg.textContent = "Fallback mode: camera + overlay (tap to toggle if you want).";
-      cam2d.style.display = "block";
-      ui2d.style.display = "block";
-      btn.style.display = "none";
+  <script>
+    // ---- 1) Camera ----
+    const cam = document.getElementById("cam");
+    const startLayer = document.getElementById("start");
+    const startBtn = document.getElementById("startBtn");
 
-      try {
+    async function startCamera(){
+      try{
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false
         });
-        cam2d.srcObject = stream;
-      } catch (e) {
-        alert("Camera permission is required. Please allow camera access and try again.");
+        cam.srcObject = stream;
+        startLayer.style.display = "none";
+      }catch(e){
+        alert("Camera permission is required. Please open in Chrome and allow camera.");
+        console.error(e);
       }
     }
+    startBtn.addEventListener("click", startCamera);
 
-    // ---------- WebXR AR (true plane hit-test) ----------
-    let renderer, scene, camera;
-    let xrSession, refSpace, viewerSpace, hitTestSource;
-    let reticle, pathGroup, placedOnce = false;
+    // ---- 2) UI state machine ----
+    // States: scanning -> detected -> guide -> blocked -> back to scanning (loop)
+    const states = ["scanning","detected","guide","blocked"];
+    let idx = 0;
 
-    function makeReticle() {
-      const geo = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
-      const mat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0.9 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.visible = false;
-      mesh.matrixAutoUpdate = false;
-      return mesh;
+    const setVisible = (id, on) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = on ? "" : "none";
+    };
+
+    function showState(s){
+      // Always show back (visual only)
+      setVisible("back", true);
+
+      // scanning
+      setVisible("scanText",  s === "scanning");
+      setVisible("scanFrame", s === "scanning");
+
+      // detected
+      setVisible("check",   s === "detected");
+      setVisible("detText", s === "detected");
+
+      // guide
+      setVisible("arrow", s === "guide");
+      setVisible("dots",  s === "guide");
+
+      // blocked
+      setVisible("xmark", s === "blocked");
     }
 
-    async function loadTexture(url) {
-      return await new Promise((resolve, reject) => {
-        new THREE.TextureLoader().load(url, (tex) => resolve(tex), undefined, reject);
-      });
-    }
+    // Initial UI
+    showState(states[idx]);
 
-    async function makePathGroup() {
-      const pathTex = await loadTexture("path_ok.png");
-      const dotsTex = await loadTexture("dots.png");
-      pathTex.colorSpace = THREE.SRGBColorSpace;
-      dotsTex.colorSpace = THREE.SRGBColorSpace;
+    // Tap anywhere (except the Start overlay) to advance
+    document.addEventListener("click", (e) => {
+      // If start layer is visible, ignore taps behind it
+      if (startLayer.style.display !== "none") return;
 
-      // You asked not to change PNG sizes — so we keep the plane SMALL to stay sharp.
-      const W = 0.6;  // meters
-      const L = 1.0;  // meters
-
-      const group = new THREE.Group();
-
-      const pathMat = new THREE.MeshBasicMaterial({ map: pathTex, transparent:true, opacity:0.85 });
-      const pathGeo = new THREE.PlaneGeometry(W, L);
-      const pathMesh = new THREE.Mesh(pathGeo, pathMat);
-      pathMesh.rotation.x = -Math.PI / 2;
-      group.add(pathMesh);
-
-      const dotsMat = new THREE.MeshBasicMaterial({ map: dotsTex, transparent:true, opacity:0.95 });
-      const dotsGeo = new THREE.PlaneGeometry(W, L);
-      const dotsMesh = new THREE.Mesh(dotsGeo, dotsMat);
-      dotsMesh.position.y = 0.002;
-      dotsMesh.rotation.x = -Math.PI / 2;
-      group.add(dotsMesh);
-
-      return group;
-    }
-
-    async function startWebXRAR() {
-      if (!navigator.xr) return false;
-
-      const supported = await navigator.xr.isSessionSupported("immersive-ar").catch(() => false);
-      if (!supported) return false;
-
-      msg.textContent = "WebXR AR: move phone to detect floor, then tap to place the path.";
-
-      renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
-
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera();
-
-      reticle = makeReticle();
-      scene.add(reticle);
-
-      xrSession = await navigator.xr.requestSession("immersive-ar", {
-        requiredFeatures: ["hit-test"],
-        optionalFeatures: ["dom-overlay"],
-        domOverlay: { root: document.body }
-      });
-
-      renderer.xr.setSession(xrSession);
-
-      refSpace = await xrSession.requestReferenceSpace("local");
-      viewerSpace = await xrSession.requestReferenceSpace("viewer");
-      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-
-      pathGroup = await makePathGroup();
-
-      btn.style.display = "none";
-
-      xrSession.addEventListener("select", () => {
-        if (!reticle.visible) return;
-
-        if (!placedOnce) {
-          scene.add(pathGroup);
-          placedOnce = true;
-        }
-        pathGroup.position.setFromMatrixPosition(reticle.matrix);
-        pathGroup.rotation.set(-Math.PI / 2, 0, 0);
-
-        msg.textContent = "Placed! Tap again to reposition.";
-      });
-
-      xrSession.addEventListener("end", () => {
-        placedOnce = false;
-        msg.textContent = "AR ended.";
-        btn.style.display = "";
-      });
-
-      renderer.setAnimationLoop((t, frame) => {
-        if (frame) {
-          const hits = frame.getHitTestResults(hitTestSource);
-          if (hits.length > 0) {
-            const pose = hits[0].getPose(refSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-          } else {
-            reticle.visible = false;
-          }
-        }
-        renderer.render(scene, camera);
-      });
-
-      return true;
-    }
-
-    // ---------- Start button ----------
-    btn.addEventListener("click", async () => {
-      msg.textContent = "Trying WebXR AR…";
-      const ok = await startWebXRAR();
-      if (!ok) {
-        // If WebXR AR isn't supported, guarantee camera opens
-        await startFallback2D();
-      }
+      idx = (idx + 1) % states.length;
+      showState(states[idx]);
     });
 
-    // Initial text
-    msg.textContent = "Tap Start. If WebXR AR isn't supported, it will open normal camera automatically.";
+    // ---- 3) Optional: keyboard control (desktop demo) ----
+    // 1/2/3/4 to jump to a state
+    document.addEventListener("keydown", (e) => {
+      const map = { "1":0, "2":1, "3":2, "4":3 };
+      if (map[e.key] !== undefined){
+        idx = map[e.key];
+        showState(states[idx]);
+      }
+    });
   </script>
 </body>
 </html>
-
-
-
