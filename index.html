@@ -3,41 +3,85 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>OpenWay WebXR AR Demo</title>
+  <title>OpenWay WebAR Prototype</title>
   <style>
-    html, body { margin:0; height:100%; overflow:hidden; background:#000; }
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; font-family: system-ui; }
+
+    /* Fallback camera (getUserMedia) */
+    #cam2d {
+      position:fixed; inset:0;
+      width:100%; height:100%;
+      object-fit:cover;
+      display:none;
+    }
 
     /* Simple UI */
-    #btn{
+    #btn {
       position:fixed; left:50%; bottom:56px; transform:translateX(-50%);
       padding:12px 16px; border-radius:12px; border:0;
-      font:14px system-ui; z-index:20;
+      font:14px system-ui; z-index:30;
     }
-    #msg{
+    #msg {
       position:fixed; left:0; right:0; bottom:14px;
       text-align:center; color:#fff; font:13px system-ui;
-      opacity:.85; z-index:10; pointer-events:none;
+      opacity:.85; z-index:20; pointer-events:none;
+      padding:0 14px;
     }
+
+    /* 2D overlay (fallback mode) */
+    #ui2d { position:fixed; inset:0; pointer-events:none; z-index:15; display:none; }
+    .el { position:absolute; user-select:none; -webkit-user-drag:none; }
+
+    /* tweak positions for your design */
+    #pathOk2d { left:50%; top:56%; transform:translateX(-50%); width:min(88vw,560px); opacity:.75; }
+    #dots2d   { left:50%; top:58%; transform:translateX(-50%); width:min(60vw,420px); opacity:.95; }
   </style>
 </head>
 <body>
-  <button id="btn">Start AR</button>
-  <div id="msg">Move your phone to detect the floor, then tap to place the path.</div>
+  <button id="btn">Start</button>
+  <div id="msg">Starting…</div>
+
+  <!-- Fallback camera layer -->
+  <video id="cam2d" autoplay playsinline muted></video>
+
+  <!-- Fallback 2D overlay -->
+  <div id="ui2d">
+    <img id="pathOk2d" class="el" src="path_ok.png" alt="Path highlight">
+    <img id="dots2d" class="el" src="dots.png" alt="Dots">
+  </div>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
     const btn = document.getElementById("btn");
     const msg = document.getElementById("msg");
+    const cam2d = document.getElementById("cam2d");
+    const ui2d = document.getElementById("ui2d");
 
+    // ---------- Fallback: normal camera + 2D overlay ----------
+    async function startFallback2D() {
+      msg.textContent = "Fallback mode: camera + overlay (tap to toggle if you want).";
+      cam2d.style.display = "block";
+      ui2d.style.display = "block";
+      btn.style.display = "none";
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        cam2d.srcObject = stream;
+      } catch (e) {
+        alert("Camera permission is required. Please allow camera access and try again.");
+      }
+    }
+
+    // ---------- WebXR AR (true plane hit-test) ----------
     let renderer, scene, camera;
     let xrSession, refSpace, viewerSpace, hitTestSource;
-    let reticle;
-    let pathGroup = null;
-    let placedOnce = false;
+    let reticle, pathGroup, placedOnce = false;
 
     function makeReticle() {
-      // A small ring to show where the hit-test finds the floor
       const geo = new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2);
       const mat = new THREE.MeshBasicMaterial({ transparent:true, opacity:0.9 });
       const mesh = new THREE.Mesh(geo, mat);
@@ -53,59 +97,41 @@
     }
 
     async function makePathGroup() {
-      // Load textures
       const pathTex = await loadTexture("path_ok.png");
       const dotsTex = await loadTexture("dots.png");
-
       pathTex.colorSpace = THREE.SRGBColorSpace;
       dotsTex.colorSpace = THREE.SRGBColorSpace;
 
-      // IMPORTANT: Do NOT change PNG sizes.
-      // Instead we scale the plane in meters to keep it sharp on mobile.
-      const W = 0.6;  // meters (width)
-      const L = 1.0;  // meters (length)
+      // You asked not to change PNG sizes — so we keep the plane SMALL to stay sharp.
+      const W = 0.6;  // meters
+      const L = 1.0;  // meters
 
       const group = new THREE.Group();
 
-      // Path highlight plane
-      const pathMat = new THREE.MeshBasicMaterial({
-        map: pathTex,
-        transparent: true,
-        opacity: 0.85
-      });
+      const pathMat = new THREE.MeshBasicMaterial({ map: pathTex, transparent:true, opacity:0.85 });
       const pathGeo = new THREE.PlaneGeometry(W, L);
       const pathMesh = new THREE.Mesh(pathGeo, pathMat);
       pathMesh.rotation.x = -Math.PI / 2;
       group.add(pathMesh);
 
-      // Dots plane (slightly above to avoid z-fighting)
-      const dotsMat = new THREE.MeshBasicMaterial({
-        map: dotsTex,
-        transparent: true,
-        opacity: 0.95
-      });
+      const dotsMat = new THREE.MeshBasicMaterial({ map: dotsTex, transparent:true, opacity:0.95 });
       const dotsGeo = new THREE.PlaneGeometry(W, L);
       const dotsMesh = new THREE.Mesh(dotsGeo, dotsMat);
-      dotsMesh.position.y = 0.002; // 2mm above
+      dotsMesh.position.y = 0.002;
       dotsMesh.rotation.x = -Math.PI / 2;
       group.add(dotsMesh);
 
       return group;
     }
 
-    async function startAR() {
-      if (!navigator.xr) {
-        alert("WebXR is not supported. Please use Android Chrome.");
-        return;
-      }
+    async function startWebXRAR() {
+      if (!navigator.xr) return false;
 
-      const supported = await navigator.xr.isSessionSupported("immersive-ar");
-      if (!supported) {
-        alert("immersive-ar is not supported on this device/browser. Try Android Chrome + ARCore.");
-        return;
-      }
+      const supported = await navigator.xr.isSessionSupported("immersive-ar").catch(() => false);
+      if (!supported) return false;
 
-      // Renderer
+      msg.textContent = "WebXR AR: move phone to detect floor, then tap to place the path.";
+
       renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
@@ -114,11 +140,9 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera();
 
-      // Reticle
       reticle = makeReticle();
       scene.add(reticle);
 
-      // Start session
       xrSession = await navigator.xr.requestSession("immersive-ar", {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
@@ -131,13 +155,10 @@
       viewerSpace = await xrSession.requestReferenceSpace("viewer");
       hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
 
-      // Load once
       pathGroup = await makePathGroup();
 
       btn.style.display = "none";
-      msg.textContent = "Move your phone to detect the floor. Tap to place the path.";
 
-      // Tap to place / reposition
       xrSession.addEventListener("select", () => {
         if (!reticle.visible) return;
 
@@ -145,10 +166,7 @@
           scene.add(pathGroup);
           placedOnce = true;
         }
-
-        // Place where the reticle is
         pathGroup.position.setFromMatrixPosition(reticle.matrix);
-        // Keep it flat on the floor
         pathGroup.rotation.set(-Math.PI / 2, 0, 0);
 
         msg.textContent = "Placed! Tap again to reposition.";
@@ -156,8 +174,8 @@
 
       xrSession.addEventListener("end", () => {
         placedOnce = false;
-        btn.style.display = "";
         msg.textContent = "AR ended.";
+        btn.style.display = "";
       });
 
       renderer.setAnimationLoop((t, frame) => {
@@ -173,9 +191,22 @@
         }
         renderer.render(scene, camera);
       });
+
+      return true;
     }
 
-    btn.addEventListener("click", startAR);
+    // ---------- Start button ----------
+    btn.addEventListener("click", async () => {
+      msg.textContent = "Trying WebXR AR…";
+      const ok = await startWebXRAR();
+      if (!ok) {
+        // If WebXR AR isn't supported, guarantee camera opens
+        await startFallback2D();
+      }
+    });
+
+    // Initial text
+    msg.textContent = "Tap Start. If WebXR AR isn't supported, it will open normal camera automatically.";
   </script>
 </body>
 </html>
