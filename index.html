@@ -3,246 +3,289 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>OpenWay WebAR Prototype</title>
+  <title>WebAR Route Prototype</title>
 
   <style>
-    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#000; }
+    :root{
+      /* JS 会写入 --vh 来避免手机地址栏导致的走位 */
+      --vh: 1vh;
 
-    /* Camera (always full screen) */
-    #cam{
-      position:fixed; inset:0;
-      width:100vw; height:100vh;
-      object-fit:cover;
-      background:#000;
-      z-index:0;
+      --yellow: #F5C542;
+      --green: #34C759;
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
     }
 
-    /* UI layer */
-    #ui{
-      position:fixed; inset:0;
-      z-index:10;
-      pointer-events:none;
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
     }
 
-    .el{
-      position:absolute;
-      user-select:none;
-      -webkit-user-drag:none;
-      pointer-events:none;
-      transform-origin:center center;
+    /* Camera full screen */
+    #camera {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: calc(var(--vh) * 100);
+      object-fit: cover;
+      z-index: 0;
+      background: #000;
     }
 
-    /* --- Base positions (you can tweak these) --- */
+    /* UI overlay */
+    #ui {
+      position: fixed;
+      inset: 0;
+      height: calc(var(--vh) * 100);
+      z-index: 10;
+      pointer-events: none; /* 默认不挡点按 */
+    }
 
-    /* back icon */
-    #back{
-      left: 16px; top: 16px;
+    /* Back button (optional) */
+    .back {
+      position: absolute;
+      top: env(safe-area-inset-top, 0);
+      left: 12px;
+      margin-top: 10px;
       width: 44px;
-      opacity: .95;
+      height: 44px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.12);
+      backdrop-filter: blur(10px);
+      display: grid;
+      place-items: center;
+      pointer-events: auto;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .back svg { opacity: .95; }
+
+    /* Intro overlay */
+    #intro {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(0,0,0,.08);
+      pointer-events: auto; /* 允许点击 */
     }
 
-    /* scanning text + frame */
-    #scanText{
-      left:50%; top: 18%;
+    .tap {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0) + 28px);
+      width: 100%;
+      text-align: center;
+      color: rgba(255,255,255,.9);
+      font-size: 16px;
+      letter-spacing: .2px;
+      text-shadow: 0 6px 18px rgba(0,0,0,.45);
+    }
+
+    /* Route container - "贴地感" */
+    #route {
+      position: absolute;
+      left: 50%;
+      bottom: 22%;
       transform: translateX(-50%);
-      width: min(84vw, 560px);
-      opacity: .98;
-    }
-    #scanFrame{
-      left:50%; top: 54%;
-      transform: translate(-50%,-50%);
-      width: min(78vw, 560px);
-      opacity: .98;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
+      pointer-events: none;
+      opacity: 0;
+      transform-origin: center;
+      transition: opacity .25s ease;
     }
 
-    /* detected (CHECK + text)  ← you asked: move check a bit up */
-    #check{
-      left:50%;
-      top: 20%;                /* was lower; move UP by decreasing this */
+    /* Dot base */
+    .dot {
+      width: 16px;
+      height: 16px;
+      background: var(--yellow);
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
+      animation: pulse 1.6s infinite ease-in-out;
+      will-change: opacity, transform;
+    }
+
+    /* 透视感：越远越小越淡 */
+    .dot:nth-child(1) { opacity: 0.35; transform: scale(0.75) scaleY(0.92); animation-delay: 0s; }
+    .dot:nth-child(2) { opacity: 0.55; transform: scale(0.85) scaleY(0.92); animation-delay: 0.2s; }
+    .dot:nth-child(3) { opacity: 0.80; transform: scale(0.95) scaleY(0.92); animation-delay: 0.4s; }
+    .dot:nth-child(4) { opacity: 1.00; transform: scale(1.00) scaleY(0.92); animation-delay: 0.6s; }
+
+    /* 流动感：克制的“呼吸” */
+    @keyframes pulse {
+      0%   { filter: brightness(0.95); }
+      50%  { filter: brightness(1.15); }
+      100% { filter: brightness(0.95); }
+    }
+
+    /* Optional: subtle ground glow */
+    .dot::after{
+      content:"";
+      display:block;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow: 0 0 22px rgba(245,197,66,.55);
+      opacity: .35;
+    }
+
+    /* Detected banner */
+    #detected {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -54%);
+      text-align: center;
+      opacity: 0;
+      transition: opacity .25s ease, transform .25s ease;
+      pointer-events: none;
+    }
+
+    .check {
+      width: 120px;
+      height: 120px;
+      border-radius: 28px;
+      background: var(--green);
+      display: grid;
+      place-items: center;
+      margin: 0 auto 10px auto;
+      box-shadow: var(--shadow);
+    }
+
+    .detected-text {
+      font-weight: 800;
+      font-size: 46px;
+      line-height: 1.05;
+      color: var(--yellow);
+      text-shadow: 0 10px 24px rgba(0,0,0,.45);
+      letter-spacing: .4px;
+    }
+
+    /* 状态：运行中 */
+    body.is-running #route { opacity: 1; }
+    /* 状态：检测到 */
+    body.is-detected #detected {
+      opacity: 1;
+      transform: translate(-50%, -58%);
+    }
+
+    /* Small hint */
+    .hint {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0) + 70px);
+      left: 50%;
       transform: translateX(-50%);
-      width: min(32vw, 140px);
-      opacity: .98;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.14);
+      color: rgba(255,255,255,.92);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .25s ease;
     }
-    #detText{
-      left:50%;
-      top: 34%;
-      transform: translateX(-50%);
-      width: min(78vw, 560px);
-      opacity: .98;
-    }
-
-    /* guide (ARROW + DOTS)  ← you asked: arrow move up */
-    #arrow{
-      left: 14%;
-      top: 36%;                /* move UP by decreasing this */
-      width: min(34vw, 180px);
-      opacity: .98;
-    }
-    #dots{
-      left:50%;
-      top: 62%;
-      transform: translateX(-50%);
-      width: min(64vw, 460px);
-      opacity: .98;
-    }
-
-    /* blocked X */
-    #xmark{
-      left:50%; top: 20%;
-      transform: translateX(-50%);
-      width: min(36vw, 160px);
-      opacity: .98;
-    }
-
-    /* Start screen */
-    #start{
-      position:fixed; inset:0;
-      z-index:20;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      flex-direction:column;
-      gap:12px;
-      background: rgba(0,0,0,.55);
-    }
-    #start button{
-      border:0;
-      border-radius:14px;
-      padding:12px 18px;
-      font: 600 14px system-ui;
-      cursor:pointer;
-    }
-    #start p{
-      margin:0;
-      color:#fff;
-      opacity:.9;
-      font: 13px system-ui;
-      text-align:center;
-      padding: 0 18px;
-    }
-
-    /* Hint */
-    #hint{
-      position:fixed; left:0; right:0; bottom:14px;
-      z-index:15;
-      text-align:center;
-      color:#fff;
-      font: 13px system-ui;
-      opacity:.80;
-      pointer-events:none;
-      padding:0 14px;
-    }
-
-    /* Optional: hide hint on desktop wide screens */
-    @media (min-width: 900px){
-      #hint{ opacity:.65; }
-    }
+    body.is-running .hint { opacity: 1; }
   </style>
 </head>
 
 <body>
-  <video id="cam" autoplay playsinline muted></video>
+  <video id="camera" autoplay playsinline muted></video>
 
   <div id="ui">
-    <!-- Always visible back icon (visual only) -->
-    <img id="back" class="el" src="back.png" alt="Back" />
+    <!-- Optional back -->
+    <div class="back" onclick="location.reload()" aria-label="Back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
 
-    <!-- SCANNING -->
-    <img id="scanText"  class="el" src="scan_text.png" alt="Scan around to find Accessible Entrance" />
-    <img id="scanFrame" class="el" src="scan_frame.png" alt="Scan frame" />
+    <div class="hint">Tap to toggle “Detected”</div>
 
-    <!-- DETECTED -->
-    <img id="check"  class="el" src="check.png" alt="Check" />
-    <img id="detText" class="el" src="detected_text.png" alt="Accessible Route Detected" />
+    <!-- Route dots -->
+    <div id="route" aria-hidden="true">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
 
-    <!-- GUIDE -->
-    <img id="arrow" class="el" src="arrow.png" alt="Arrow" />
-    <img id="dots"  class="el" src="dots.png" alt="Dots" />
+    <!-- Detected UI -->
+    <div id="detected" aria-hidden="true">
+      <div class="check">
+        <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
+          <path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="detected-text">Accessible Route<br/>Detected</div>
+    </div>
 
-    <!-- BLOCKED -->
-    <img id="xmark" class="el" src="x.png" alt="Not accessible" />
-  </div>
-
-  <div id="hint">Tap anywhere to continue</div>
-
-  <div id="start">
-    <button id="startBtn">Start Camera</button>
-    <p>If you don’t see the camera, please allow camera permission in Chrome.</p>
+    <!-- Tap anywhere to continue -->
+    <div id="intro">
+      <div class="tap">Tap anywhere to continue</div>
+    </div>
   </div>
 
   <script>
-    // ---- 1) Camera ----
-    const cam = document.getElementById("cam");
-    const startLayer = document.getElementById("start");
-    const startBtn = document.getElementById("startBtn");
+    // Fix mobile viewport height drifting (address bar / camera)
+    function setVH() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    window.addEventListener('resize', setVH);
+    window.addEventListener('orientationchange', setVH);
+    setVH();
 
-    async function startCamera(){
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
-        });
-        cam.srcObject = stream;
-        startLayer.style.display = "none";
-      }catch(e){
-        alert("Camera permission is required. Please open in Chrome and allow camera.");
-        console.error(e);
+    const video = document.getElementById('camera');
+    const intro = document.getElementById('intro');
+
+    async function startCamera() {
+      // Prefer back camera
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        await video.play();
+      } catch (err) {
+        alert("Camera cannot be started.\n\nTry:\n- HTTPS (GitHub Pages is OK)\n- Allow camera permission\n- Use Chrome\n\nError: " + err.message);
+        console.error(err);
       }
     }
-    startBtn.addEventListener("click", startCamera);
 
-    // ---- 2) UI state machine ----
-    // States: scanning -> detected -> guide -> blocked -> back to scanning (loop)
-    const states = ["scanning","detected","guide","blocked"];
-    let idx = 0;
-
-    const setVisible = (id, on) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.style.display = on ? "" : "none";
-    };
-
-    function showState(s){
-      // Always show back (visual only)
-      setVisible("back", true);
-
-      // scanning
-      setVisible("scanText",  s === "scanning");
-      setVisible("scanFrame", s === "scanning");
-
-      // detected
-      setVisible("check",   s === "detected");
-      setVisible("detText", s === "detected");
-
-      // guide
-      setVisible("arrow", s === "guide");
-      setVisible("dots",  s === "guide");
-
-      // blocked
-      setVisible("xmark", s === "blocked");
-    }
-
-    // Initial UI
-    showState(states[idx]);
-
-    // Tap anywhere (except the Start overlay) to advance
-    document.addEventListener("click", (e) => {
-      // If start layer is visible, ignore taps behind it
-      if (startLayer.style.display !== "none") return;
-
-      idx = (idx + 1) % states.length;
-      showState(states[idx]);
+    // Tap to continue: start camera + show route
+    intro.addEventListener('click', async () => {
+      intro.style.display = 'none';
+      await startCamera();
+      document.body.classList.add('is-running');
     });
 
-    // ---- 3) Optional: keyboard control (desktop demo) ----
-    // 1/2/3/4 to jump to a state
-    document.addEventListener("keydown", (e) => {
-      const map = { "1":0, "2":1, "3":2, "4":3 };
-      if (map[e.key] !== undefined){
-        idx = map[e.key];
-        showState(states[idx]);
-      }
+    // Tap anywhere to toggle detected UI (demo)
+    document.addEventListener('click', (e) => {
+      // avoid double triggering on intro
+      if (intro.style.display !== 'none') return;
+      // toggle detected state
+      document.body.classList.toggle('is-detected');
     });
+
+    // Safety: if user already granted permission and browser autoplay works, you can optionally auto-start
+    // (but for mobile, tap-first is more reliable).
   </script>
 </body>
 </html>
