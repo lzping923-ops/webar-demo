@@ -474,20 +474,39 @@
     });
 
     // ---- Draggable + auto-rotate arrow ----
-    let dragging = false;
-    let offsetX = 0, offsetY = 0;
-    let lastX = null, lastY = null;
+   let lastX = null;
+let lastY = null;
 
-    function getPoint(e){
-      if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      return { x: e.clientX, y: e.clientY };
-    }
+clickLayer.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  lastX = t.clientX;
+  lastY = t.clientY;
+}, { passive: true });
 
-    function applyArrowRotation(deg){
-      // Keep current translation removed (we set left/top during drag)
-      arrow.dataset.rot = String(deg);
-      arrow.style.transform = `rotate(${deg}deg)`;
+clickLayer.addEventListener('touchmove', (e) => {
+  if (lastX === null || lastY === null) return;
+
+  const t = e.touches[0];
+  const dx = t.clientX - lastX;
+  const dy = t.clientY - lastY;
+
+  const dead = 6; // 防抖
+  if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
+    if (Math.abs(dx) > Math.abs(dy)) {
+      applyArrowRotation(dx > 0 ? 90 : 270);   // → / ←
+    } else {
+      applyArrowRotation(dy > 0 ? 180 : 0);    // ↓ / ↑
     }
+  }
+
+  lastX = t.clientX;
+  lastY = t.clientY;
+}, { passive: true });
+
+clickLayer.addEventListener('touchend', () => {
+  lastX = lastY = null;
+});
+
 
     function startDrag(e){
       const active = document.querySelector('.state.active')?.id;
@@ -568,5 +587,6 @@
   </script>
 </body>
 </html>
+
 
 
