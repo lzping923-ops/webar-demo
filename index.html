@@ -242,24 +242,21 @@
 
     /* Draggable arrow */
     #arrow{
-      position: absolute;
-      left: 50%;
-      bottom: 34%;
-      transform: translateX(-50%) rotate(0deg); /* 0deg = ↑ */
-      transform-origin: center center;
-      width: 72px;     /* ✅ 这里调大小 */
-      height: auto;
-      z-index: 25;
+  position: absolute;
+  left: 50%;
+  bottom: 28%;              /* 固定在这里 */
+  transform: translateX(-50%) rotate(0deg);
+  transform-origin: center center;
 
-      pointer-events: auto;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-drag: none;
+  width: 72px;
+  z-index: 25;
 
-      filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
-      transition: transform 0.12s ease-out; /* 更顺滑 */
-      display: none;  /* only on guide */
-    }
+  pointer-events: none;     /* 👈 不再被拖 */
+  user-select: none;
+
+  filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
+  transition: transform 0.12s ease-out;
+}
   </style>
 </head>
 
@@ -571,4 +568,5 @@
   </script>
 </body>
 </html>
+
 
