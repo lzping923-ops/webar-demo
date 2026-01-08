@@ -1,242 +1,624 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>OpenWay WebAR Demo</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>WebAR Flow Prototype</title>
 
-<style>
-:root{
-  --yellow:#F5C542;
-  --green:#34C759;
-  --red:#FF3B30;
-  --shadow:0 12px 30px rgba(0,0,0,.35);
-}
-html,body{
-  margin:0;
-  width:100%;
-  height:100%;
-  background:#000;
-  overflow:hidden;
-  font-family:system-ui;
-}
-#camera{
-  position:fixed;
-  inset:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-#ui{
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-}
+  <style>
+    :root{
+      --vh: 1vh;
+      --yellow: #F5C542;
+      --green: #34C759;
+      --red: #FF3B30;
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
 
-/* STATES */
-.state{
-  position:absolute;
-  inset:0;
-  display:none;
-  justify-content:center;
-  align-items:center;
-  text-align:center;
-}
-.state.active{display:flex;}
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
 
-#clickLayer{
-  position:absolute;
-  inset:0;
-  pointer-events:auto;
-}
+    /* Camera full screen */
+    #camera{
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: calc(var(--vh) * 100);
+      object-fit: cover;
+      z-index: 0;
+      background: #000;
+    }
 
-/* CARD */
-.card{
-  background:rgba(0,0,0,.35);
-  border:1px solid rgba(255,255,255,.15);
-  backdrop-filter:blur(10px);
-  border-radius:18px;
-  padding:16px;
-  max-width:80%;
-  color:#fff;
-  box-shadow:var(--shadow);
-}
-.title{font-size:18px;font-weight:700;margin-bottom:6px;}
-.sub{font-size:14px;opacity:.85}
+    /* UI overlay */
+    #ui{
+      position: fixed;
+      inset: 0;
+      height: calc(var(--vh) * 100);
+      z-index: 10;
+      pointer-events: none;
+    }
 
-/* ARROW + ROUTE */
-#arrow{
-  position:absolute;
-  bottom:48%;
-  left:50%;
-  transform:translateX(-50%);
-  width:70px;
-  display:none;
-}
-#route{
-  position:absolute;
-  bottom:22%;
-  left:50%;
-  transform:translateX(-50%);
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-}
-.dot{
-  width:14px;height:14px;border-radius:50%;
-  background:var(--yellow);
-  opacity:.8;
-}
+    /* State containers */
+    .state{
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .state.active{ display: flex; }
 
-/* ARRIVED CARD */
-.arrived{
-  position:absolute;
-  bottom:18%;
-  left:50%;
-  transform:translateX(-50%);
-  width:85%;
-  max-width:520px;
-}
-.arrived h3{
-  margin:0 0 8px 0;
-  font-size:18px;
-}
-.arrived ul{
-  margin:0;
-  padding-left:18px;
-  text-align:left;
-  font-size:14px;
-}
-</style>
+    /* Click layer to advance + swipe */
+    #clickLayer{
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      background: transparent;
+    }
+
+    /* Back button */
+    .back {
+      position: absolute;
+      top: env(safe-area-inset-top, 0);
+      left: 12px;
+      margin-top: 10px;
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.12);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,.15);
+      display: none;            /* JS 控制显示 */
+      place-items: center;
+      pointer-events: auto;
+      cursor: pointer;
+      z-index: 30;
+    }
+    .back img{
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      opacity: .95;
+    }
+    .back svg { opacity: .95; }
+
+    /* Optional demo helper buttons */
+    .demoBtns{
+      position: absolute;
+      right: 12px;
+      top: calc(env(safe-area-inset-top, 0) + 12px);
+      display: none;
+      gap: 10px;
+      pointer-events: auto;
+      z-index: 30;
+    }
+    .btn{
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.28);
+      color: rgba(255,255,255,.95);
+      backdrop-filter: blur(10px);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* Bottom hint */
+    .tap-hint{
+      position: absolute;
+      width: 100%;
+      bottom: calc(env(safe-area-inset-bottom, 0) + 26px);
+      left: 0;
+      color: rgba(255,255,255,.92);
+      font-size: 16px;
+      text-shadow: 0 8px 22px rgba(0,0,0,.5);
+      letter-spacing: .2px;
+      pointer-events: none;
+    }
+
+    /* Center card (Start) */
+    .card{
+      background: rgba(0,0,0,.32);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 18px;
+      padding: 14px 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 28px rgba(0,0,0,.25);
+      max-width: 78%;
+    }
+    .title{
+      font-size: 18px;
+      font-weight: 750;
+      color: rgba(255,255,255,.95);
+      margin: 0 0 6px 0;
+    }
+    .sub{
+      font-size: 14px;
+      color: rgba(255,255,255,.82);
+      margin: 0;
+    }
+
+    /* Stage chip */
+    .stage-chip{
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0) + 70px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.14);
+      color: rgba(255,255,255,.92);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+    }
+
+    /* Detected OK/NO text */
+    .big{
+      font-weight: 900;
+      font-size: 44px;
+      line-height: 1.05;
+      color: var(--yellow);
+      text-shadow: 0 12px 28px rgba(0,0,0,.45);
+      margin-top: 10px;
+    }
+
+    .iconBox{
+      width: 118px; height: 118px;
+      border-radius: 28px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 10px auto;
+      box-shadow: var(--shadow);
+    }
+    .okBox{ background: var(--green); }
+    .noBox{ background: var(--red); }
+
+    /* Guide dots */
+    #route{
+      position: absolute;
+      left: 50%;
+      bottom: 22%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
+      pointer-events: none;
+      z-index: 10;
+    }
+    .dot{
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--yellow);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.08) inset;
+      animation: pulse 1.6s infinite ease-in-out;
+      will-change: filter, transform;
+    }
+    .dot::after{
+      content:"";
+      display:block;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow: 0 0 22px rgba(245,197,66,.55);
+      opacity: .35;
+    }
+    .dot:nth-child(1){ opacity:.35; transform: scale(.75) scaleY(.90); animation-delay:0s; }
+    .dot:nth-child(2){ opacity:.55; transform: scale(.85) scaleY(.90); animation-delay:.2s; }
+    .dot:nth-child(3){ opacity:.80; transform: scale(.95) scaleY(.90); animation-delay:.4s; }
+    .dot:nth-child(4){ opacity:1;    transform: scale(1)   scaleY(.90); animation-delay:.6s; }
+
+    @keyframes pulse{
+      0%   { filter: brightness(.95); }
+      50%  { filter: brightness(1.18); }
+      100% { filter: brightness(.95); }
+    }
+
+    /* Fixed arrow: position fixed, only rotates */
+    #arrow{
+      position: absolute;
+      left: 50%;
+      bottom: 50%;
+      transform: translateX(-50%) rotate(0deg); /* 0deg = ↑ */
+      transform-origin: center center;
+
+      width: 72px;  /* ✅ 改这边调大小 */
+      height: auto;
+      z-index: 25;
+
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+
+      filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
+      transition: transform 0.12s ease-out;
+      display: none; /* only on guide */
+    }
+
+    /* Arrived floating info card */
+    .infoCard{
+      position: absolute;
+      left: 50%;
+      bottom: 18%;
+      transform: translateX(-50%);
+      width: min(88vw, 520px);
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      padding: 14px 14px 12px 14px;
+      text-align: left;
+      pointer-events: none;
+    }
+    .infoTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom: 10px;
+    }
+    .arrivedChip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background: rgba(52,199,89,.20);
+      border: 1px solid rgba(52,199,89,.45);
+      color: rgba(255,255,255,.92);
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing:.2px;
+    }
+    .placeName{
+      color: rgba(255,255,255,.96);
+      font-weight: 900;
+      font-size: 18px;
+      margin: 0;
+      line-height: 1.2;
+    }
+    .placeSub{
+      color: rgba(255,255,255,.82);
+      font-size: 13px;
+      margin: 4px 0 0 0;
+    }
+    .bullets{
+      margin: 8px 0 0 0;
+      padding-left: 18px;
+      color: rgba(255,255,255,.92);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .bullets li{ margin: 6px 0; }
+  </style>
 </head>
 
 <body>
+  <video id="camera" autoplay playsinline muted></video>
 
-<video id="camera" autoplay playsinline muted></video>
+  <div id="ui">
+    <!-- Back button -->
+    <div class="back" id="backBtn" aria-label="Back">
+      <img id="backImg" src="back.png" alt="Back" style="display:none;" />
+      <svg id="backSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" style="display:block;">
+        <path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
 
-<div id="ui">
-  <div id="clickLayer"></div>
+    <!-- Optional demo helper buttons -->
+    <div class="demoBtns" id="demoBtns">
+      <button class="btn" id="btnOK">Force OK</button>
+      <button class="btn" id="btnNO">Force NO</button>
+    </div>
 
-  <!-- START -->
-  <div class="state active" id="start">
-    <div class="card">
-      <div class="title">Start Scan</div>
-      <div class="sub">Tap to start AR scanning</div>
+    <!-- Transparent click layer -->
+    <div id="clickLayer"></div>
+
+    <!-- START -->
+    <div class="state active" id="state-start">
+      <div class="card">
+        <p class="title">Start Scan</p>
+        <p class="sub">Tap anywhere to start scanning</p>
+      </div>
+      <div class="tap-hint">Tap anywhere to continue</div>
+    </div>
+
+    <!-- SCANNING (空) -->
+    <div class="state" id="state-scan">
+      <div class="stage-chip">Scanning environment…</div>
+      <div class="tap-hint">Tap to skip</div>
+    </div>
+
+    <!-- DETECTED OK (✅ path_ok.png removed) -->
+    <div class="state" id="state-ok">
+      <div style="position:absolute; left:50%; top:46%; transform:translate(-50%,-58%); width:100%;">
+        <div class="iconBox okBox">
+          <svg width="70" height="70" viewBox="0 0 24 24" fill="none">
+            <path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="big">Accessible Route<br/>Detected</div>
+      </div>
+
+      <div class="tap-hint">Tap to start guidance</div>
+    </div>
+
+    <!-- DETECTED NO (❌ path_no.png removed) -->
+    <div class="state" id="state-no">
+      <div style="position:absolute; left:50%; top:46%; transform:translate(-50%,-58%); width:100%;">
+        <div class="iconBox noBox">
+          <svg width="68" height="68" viewBox="0 0 24 24" fill="none">
+            <path d="M12 9v5" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M12 17h.01" stroke="white" stroke-width="3.4" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="big">Route Not<br/>Accessible</div>
+      </div>
+
+      <div class="tap-hint">Tap to rescan</div>
+    </div>
+
+    <!-- GUIDE -->
+    <div class="state" id="state-guide">
+      <div class="stage-chip">Guidance</div>
+
+      <!-- require arrow.png in same folder -->
+      <img id="arrow" src="arrow.png" alt="Arrow" />
+
+      <div id="route" aria-hidden="true">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+
+      <div class="tap-hint">Swipe to rotate arrow • Tap when arrived</div>
+    </div>
+
+    <!-- ARRIVED (NEW) -->
+    <div class="state" id="state-arrived">
+      <div class="stage-chip">Arrived</div>
+
+      <div class="infoCard" id="arrivedCard">
+        <div class="infoTop">
+          <div>
+            <p class="placeName" id="placeName">USM Library – Hamzah Sendut</p>
+            <p class="placeSub" id="placeSub">Accessible facilities information</p>
+          </div>
+
+          <div class="arrivedChip" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Arrived
+          </div>
+        </div>
+
+        <ul class="bullets" id="placeBullets">
+          <li>Accessible entrance available (ramp / step-free).</li>
+          <li>Wheelchair-friendly pathways and spacious aisles.</li>
+          <li>Nearby accessible restroom & elevator access.</li>
+        </ul>
+      </div>
+
+      <div class="tap-hint">Tap to finish</div>
     </div>
   </div>
 
-  <!-- SCAN -->
-  <div class="state" id="scan">
-    <div class="card">
-      <div class="title">Scanning</div>
-      <div class="sub">Detecting environment…</div>
-    </div>
-  </div>
+  <script>
+    // Fix mobile viewport height drifting
+    function setVH() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    window.addEventListener('resize', setVH);
+    window.addEventListener('orientationchange', setVH);
+    setVH();
 
-  <!-- DETECTED -->
-  <div class="state" id="detected">
-    <div class="card">
-      <div class="title">Accessible Route Detected</div>
-      <div class="sub">Tap to start guidance</div>
-    </div>
-  </div>
+    // Back icon fallback
+    const backImg = document.getElementById('backImg');
+    const backSvg = document.getElementById('backSvg');
+    backImg.onload = () => { backImg.style.display = "block"; backSvg.style.display = "none"; };
+    backImg.onerror = () => { backImg.style.display = "none"; backSvg.style.display = "block"; };
 
-  <!-- GUIDANCE -->
-  <div class="state" id="guide">
-    <img id="arrow" src="arrow.png" />
-    <div id="route">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-    </div>
-  </div>
+    // Camera
+    const video = document.getElementById('camera');
+    async function startCamera() {
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+    }
 
-  <!-- ARRIVED -->
-  <div class="state" id="arrived">
-    <div class="card arrived">
-      <h3 id="placeName"></h3>
-      <ul id="placeBullets"></ul>
-    </div>
-  </div>
-</div>
+    // Elements
+    const states = ["state-start", "state-scan", "state-ok", "state-no", "state-guide", "state-arrived"];
+    const backBtn = document.getElementById('backBtn');
+    const demoBtns = document.getElementById('demoBtns');
+    const arrow = document.getElementById('arrow');
+    const clickLayer = document.getElementById('clickLayer');
 
-<script>
-/* CAMERA */
-async function startCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:"environment"}
-  });
-  document.getElementById("camera").srcObject = stream;
-}
+    // Arrived content (你之后要做 LectureHall / Cafe sample，就在这里加多几个 object)
+    const locations = {
+      library: {
+        name: "USM Library – Hamzah Sendut",
+        sub: "Accessible facilities information",
+        bullets: [
+          "Accessible entrance available (ramp / step-free).",
+          "Wheelchair-friendly pathways and spacious aisles.",
+          "Nearby accessible restroom & elevator access."
+        ]
+      }
+    };
 
-/* STATES */
-const states=["start","scan","detected","guide","arrived"];
-let step=0;
+    // choose which sample to show (先做 library)
+    let activeLocationKey = "library";
 
-function show(id){
-  states.forEach(s=>document.getElementById(s).classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  document.getElementById("arrow").style.display =
-    (id==="guide")?"block":"none";
-}
+    function renderArrivedCard(){
+      const data = locations[activeLocationKey] || locations.library;
+      document.getElementById("placeName").textContent = data.name;
+      document.getElementById("placeSub").textContent = data.sub;
 
-/* ARRIVED DATA */
-const locations = {
-  library:{
-    name:"USM Library – Hamzah Sendut",
-    bullets:[
-      "Accessible entrance available (ramp / step-free)",
-      "Wheelchair-friendly pathways and wide aisles",
-      "Nearby accessible restroom and elevator access"
-    ]
-  },
-  dtsp:{
-    name:"Lecture Hall – DTSP",
-    bullets:[
-      "Step-free entrance via ramp",
-      "Wide corridor and turning space",
-      "Accessible seating area available"
-    ]
-  },
-  cafesiswa:{
-    name:"Cafe Siswa",
-    bullets:[
-      "Step-free entry at main entrance",
-      "Wide seating aisles for wheelchair access",
-      "Staff assistance available on request"
-    ]
-  }
-};
+      const ul = document.getElementById("placeBullets");
+      ul.innerHTML = "";
+      for (const t of data.bullets){
+        const li = document.createElement("li");
+        li.textContent = t;
+        ul.appendChild(li);
+      }
+    }
 
-/* LOCATION SWITCH */
-let activeLocationKey="library";
-const params=new URLSearchParams(location.search);
-const loc=params.get("loc");
-if(loc && locations[loc]) activeLocationKey=loc;
+    // Helpers
+    function show(id){
+      for (const s of states) document.getElementById(s).classList.remove('active');
+      document.getElementById(id).classList.add('active');
 
-function renderArrived(){
-  const data=locations[activeLocationKey];
-  document.getElementById("placeName").textContent=data.name;
-  const ul=document.getElementById("placeBullets");
-  ul.innerHTML="";
-  data.bullets.forEach(t=>{
-    const li=document.createElement("li");
-    li.textContent=t;
-    ul.appendChild(li);
-  });
-}
+      // Back visibility: start 不显示，其它都显示
+      backBtn.style.display = (id === "state-start") ? "none" : "grid";
 
-/* FLOW */
-document.getElementById("clickLayer").addEventListener("click",async()=>{
-  if(step===0){await startCamera();show("scan");}
-  if(step===1){show("detected");}
-  if(step===2){show("guide");}
-  if(step===3){renderArrived();show("arrived");}
-  if(step===4){step=-1;show("start");}
-  step++;
-});
-</script>
+      // Arrow only on guide
+      arrow.style.display = (id === "state-guide") ? "block" : "none";
 
+      // Reset arrow orientation when entering guide
+      if (id === "state-guide") applyArrowRotation(0);
+
+      // Render arrived info when entering arrived
+      if (id === "state-arrived") renderArrivedCard();
+    }
+
+    // Back action: always return to Start Scan
+    backBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      show("state-start");
+    });
+
+    // Demo OK/NO buttons
+    let lastResult = "ok";
+    document.getElementById('btnOK').addEventListener('click', (e) => {
+      e.stopPropagation();
+      lastResult = "ok";
+      show("state-ok");
+    });
+    document.getElementById('btnNO').addEventListener('click', (e) => {
+      e.stopPropagation();
+      lastResult = "no";
+      show("state-no");
+    });
+
+    // Scan flow
+    let started = false;
+    let scanTimer = null;
+
+    function startScan(){
+      show("state-scan");
+      if (scanTimer) clearTimeout(scanTimer);
+      scanTimer = setTimeout(() => {
+        show(lastResult === "ok" ? "state-ok" : "state-no");
+      }, 1200);
+    }
+
+    // Tap to advance (all states)
+    clickLayer.addEventListener('click', async () => {
+      const active = document.querySelector('.state.active')?.id;
+
+      // First tap: start camera then go scanning
+      if (!started) {
+        try {
+          await startCamera();
+          started = true;
+          demoBtns.style.display = "flex"; // optional helper
+          startScan();
+        } catch (err) {
+          alert(
+            "Camera cannot be started.\n\nTry:\n- Allow camera permission\n- Use Chrome\n- Ensure HTTPS (GitHub Pages)\n\nError: " + err.message
+          );
+          console.error(err);
+        }
+        return;
+      }
+
+      // Next steps (Only change: guide -> arrived, arrived -> start)
+      if (active === "state-start") {
+        startScan();
+      } else if (active === "state-scan") {
+        show(lastResult === "ok" ? "state-ok" : "state-no");
+      } else if (active === "state-ok") {
+        show("state-guide");
+      } else if (active === "state-no") {
+        startScan();
+      } else if (active === "state-guide") {
+        show("state-arrived");
+      } else if (active === "state-arrived") {
+        show("state-start");
+      }
+    });
+
+    // Arrow rotate helper
+    function applyArrowRotation(deg){
+      arrow.style.transform = `translateX(-50%) rotate(${deg}deg)`;
+    }
+
+    // Swipe-to-rotate (ONLY in guide)
+    let swipeX = null;
+    let swipeY = null;
+
+    clickLayer.addEventListener('touchstart', (e) => {
+      const active = document.querySelector('.state.active')?.id;
+      if (active !== "state-guide") return;
+
+      const t = e.touches[0];
+      swipeX = t.clientX;
+      swipeY = t.clientY;
+    }, { passive: true });
+
+    clickLayer.addEventListener('touchmove', (e) => {
+      const active = document.querySelector('.state.active')?.id;
+      if (active !== "state-guide") return;
+      if (swipeX === null || swipeY === null) return;
+
+      const t = e.touches[0];
+      const dx = t.clientX - swipeX;
+      const dy = t.clientY - swipeY;
+
+      const dead = 10; // 防抖：越大越不敏感
+      if (Math.abs(dx) > dead || Math.abs(dy) > dead) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // left/right
+          applyArrowRotation(dx > 0 ? 90 : 270);
+        } else {
+          // up/down
+          applyArrowRotation(dy > 0 ? 180 : 0);
+        }
+        swipeX = t.clientX;
+        swipeY = t.clientY;
+      }
+    }, { passive: true });
+
+    clickLayer.addEventListener('touchend', () => {
+      swipeX = swipeY = null;
+    });
+
+    // If arrow.png missing, still allow page to work
+    arrow.addEventListener('error', () => {
+      arrow.style.display = "none";
+      console.warn("arrow.png not found. Place arrow.png next to index.html.");
+    });
+  </script>
 </body>
 </html>
